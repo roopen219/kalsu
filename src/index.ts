@@ -7,6 +7,31 @@ import { generatePassphrase } from './words'
 const isValidPassphrase = (p: string): boolean => 
   /^[a-z]+-[a-z]+-[a-z]+-[a-z]+$/.test(p) && p.length < 100
 
+// Turnstile verification
+interface TurnstileResponse {
+  success: boolean
+  'error-codes'?: string[]
+}
+
+async function verifyTurnstile(token: string, secret: string, ip: string): Promise<boolean> {
+  try {
+    const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        secret,
+        response: token,
+        remoteip: ip
+      })
+    })
+    const data = await response.json() as TurnstileResponse
+    return data.success
+  } catch (error) {
+    console.error('Turnstile verification error:', error)
+    return false
+  }
+}
+
 // Hono App
 const app = new Hono<{ Bindings: CloudflareBindings }>()
 
@@ -21,10 +46,11 @@ app.use(
     return secureHeaders({
       contentSecurityPolicy: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", 'https://unpkg.com', 'https://cdn.jsdelivr.net'],
+        scriptSrc: ["'self'", 'https://unpkg.com', 'https://cdn.jsdelivr.net', 'https://challenges.cloudflare.com'],
         styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
         fontSrc: ["'self'", 'https://fonts.gstatic.com'],
-        connectSrc: ["'self'", 'wss:', 'ws:'],
+        connectSrc: ["'self'", 'wss:', 'ws:', 'https://challenges.cloudflare.com'],
+        frameSrc: ['https://challenges.cloudflare.com'],
         imgSrc: ["'self'", 'data:'],
         objectSrc: ["'none'"],
       },
@@ -32,11 +58,22 @@ app.use(
   }
 )
 
-// API: Generate passphrase (rate limited)
+// API: Generate passphrase (rate limited + Turnstile protected)
 app.get('/api/passphrase', async (c) => {
   const ip = c.req.header('cf-connecting-ip')
   if (!ip) {
     return c.json({ error: 'Unable to identify client.' }, 400)
+  }
+  
+  // Verify Turnstile token
+  const turnstileToken = c.req.header('x-turnstile-token')
+  if (!turnstileToken) {
+    return c.json({ error: 'Security verification required.' }, 403)
+  }
+  
+  const isValid = await verifyTurnstile(turnstileToken, c.env.TURNSTILE_SECRET, ip)
+  if (!isValid) {
+    return c.json({ error: 'Security verification failed.' }, 403)
   }
   
   const { success } = await c.env.PASSPHRASE_RATE_LIMITER.limit({ key: ip })
@@ -48,11 +85,22 @@ app.get('/api/passphrase', async (c) => {
   return c.json({ passphrase })
 })
 
-// API: Validate room exists (rate limited with same limiter)
+// API: Validate room exists (rate limited + Turnstile protected)
 app.get('/api/room/:passphrase', async (c) => {
   const ip = c.req.header('cf-connecting-ip')
   if (!ip) {
     return c.json({ error: 'Unable to identify client.' }, 400)
+  }
+  
+  // Verify Turnstile token
+  const turnstileToken = c.req.header('x-turnstile-token')
+  if (!turnstileToken) {
+    return c.json({ error: 'Security verification required.' }, 403)
+  }
+  
+  const isValid = await verifyTurnstile(turnstileToken, c.env.TURNSTILE_SECRET, ip)
+  if (!isValid) {
+    return c.json({ error: 'Security verification failed.' }, 403)
   }
   
   const { success } = await c.env.PASSPHRASE_RATE_LIMITER.limit({ key: ip })

@@ -7,8 +7,10 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%2334d399'/%3E%3Cstop offset='100%25' stop-color='%232dd4bf'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' rx='20' fill='%2309090b'/%3E%3Ctext x='50' y='68' font-family='system-ui' font-size='55' font-weight='800' fill='url(%23g)' text-anchor='middle'%3EK%3C/text%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://challenges.cloudflare.com">
   <link rel="dns-prefetch" href="https://unpkg.com">
   <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+  <link rel="dns-prefetch" href="https://challenges.cloudflare.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&family=JetBrains+Mono:wght@600&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after {
@@ -684,11 +686,11 @@
 
     /* Phosphor icon sizing */
     .switcher-btn i { font-size: 18px; line-height: 1; }
-    .dropzone-icon { font-size: 48px; color: var(--text-tertiary); }
+    .dropzone-icon { font-size: 48px; color: var(--text-muted); }
     .file-icon i { font-size: 20px; }
     .file-remove i { font-size: 18px; }
     .large-file-warning i { font-size: 16px; }
-    .passphrase-code i { font-size: 18px; color: var(--text-tertiary); }
+    .passphrase-code i { font-size: 18px; color: var(--text-muted); }
     .error-message i { font-size: 18px; }
     .get-btn i { font-size: 18px; }
     .transfer-complete-icon i { font-size: 32px; }
@@ -783,6 +785,9 @@
       </div>
     </div>
 
+    <!-- Invisible Turnstile widget -->
+    <div id="turnstile-container" style="display: none;"></div>
+
     <footer class="footer">
       <p>Files are transferred directly between browsers. Nothing is stored on servers.</p>
     </footer>
@@ -824,6 +829,7 @@
   </div>
 
   <!-- Scripts -->
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   <script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
   <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/streamsaver@2.0.6/StreamSaver.min.js"></script>
@@ -841,6 +847,14 @@
 
     // Constants
     const CHUNK_SIZE = 64 * 1024; // 64KB
+    // Magic prefix: null byte + KALSU + null byte (very unlikely in real files)
+    const CTRL_PREFIX = '\x00KALSU\x00';
+    // Turnstile site key (replace with your actual site key)
+    const TURNSTILE_SITE_KEY = '0x4AAAAAACKaqR40OLwEBEXs';
+
+    // Turnstile state
+    let turnstileToken = null;
+    let turnstileWidgetId = null;
 
     // DOM Elements
     const switcherBg = document.getElementById('switcherBg');
@@ -896,11 +910,27 @@
     }
 
     async function fetchPassphrase() {
-      const response = await fetch('/api/passphrase');
+      // Get Turnstile token first
+      let token;
+      try {
+        token = await getTurnstileToken();
+      } catch (e) {
+        throw new Error('Security verification failed. Please refresh and try again.');
+      }
+      
+      const response = await fetch('/api/passphrase', {
+        headers: {
+          'X-Turnstile-Token': token
+        }
+      });
       
       if (response.status === 429) {
         const data = await response.json();
         throw new Error(data.error || 'Rate limit exceeded. Please wait a moment.');
+      }
+      
+      if (response.status === 403) {
+        throw new Error('Security verification failed. Please refresh and try again.');
       }
       
       if (!response.ok) {
@@ -914,6 +944,72 @@
     function getWebSocketUrl(code) {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       return `${protocol}//${window.location.host}/ws/${code}`;
+    }
+
+    // Turnstile initialization
+    function initTurnstile() {
+      if (typeof turnstile === 'undefined') {
+        // Turnstile not loaded yet, retry
+        setTimeout(initTurnstile, 100);
+        return;
+      }
+      
+      turnstileWidgetId = turnstile.render('#turnstile-container', {
+        sitekey: TURNSTILE_SITE_KEY,
+        callback: (token) => {
+          turnstileToken = token;
+        },
+        'expired-callback': () => {
+          turnstileToken = null;
+          // Auto-refresh on expiry
+          turnstile.reset(turnstileWidgetId);
+        },
+        'error-callback': () => {
+          turnstileToken = null;
+        }
+      });
+    }
+
+    // Get a fresh Turnstile token (with retry)
+    async function getTurnstileToken() {
+      // If we have a token, return it
+      if (turnstileToken) {
+        const token = turnstileToken;
+        // Reset for next use
+        if (turnstileWidgetId !== null) {
+          turnstile.reset(turnstileWidgetId);
+        }
+        return token;
+      }
+      
+      // Wait for token with timeout
+      return new Promise((resolve, reject) => {
+        let attempts = 0;
+        const maxAttempts = 50; // 5 seconds max
+        
+        const checkToken = () => {
+          if (turnstileToken) {
+            const token = turnstileToken;
+            if (turnstileWidgetId !== null) {
+              turnstile.reset(turnstileWidgetId);
+            }
+            resolve(token);
+          } else if (attempts >= maxAttempts) {
+            reject(new Error('Turnstile verification timed out'));
+          } else {
+            attempts++;
+            setTimeout(checkToken, 100);
+          }
+        };
+        checkToken();
+      });
+    }
+
+    // Initialize Turnstile when page loads
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initTurnstile);
+    } else {
+      initTurnstile();
     }
 
     // Mode switching
@@ -964,6 +1060,7 @@
       incomingFileInfo = null;
       bytesTransferred = 0;
       transferStartTime = 0;
+      writeQueue = Promise.resolve();
       
       selectedFile = null;
       passphrase = null;
@@ -1081,11 +1178,31 @@
 
       // Validate room exists before connecting
       try {
-        const response = await fetch(`/api/room/${encodeURIComponent(code)}`);
+        // Get Turnstile token first
+        let token;
+        try {
+          token = await getTurnstileToken();
+        } catch (e) {
+          showError('Security verification failed. Please refresh and try again.');
+          return;
+        }
+        
+        const response = await fetch(`/api/room/${encodeURIComponent(code)}`, {
+          headers: {
+            'X-Turnstile-Token': token
+          }
+        });
+        
         if (response.status === 429) {
           showError('Too many attempts. Please wait a moment.');
           return;
         }
+        
+        if (response.status === 403) {
+          showError('Security verification failed. Please refresh and try again.');
+          return;
+        }
+        
         const data = await response.json();
         
         if (!data.exists) {
@@ -1155,6 +1272,10 @@
             peer.on('error', (err) => {
               console.error('Peer error:', err);
             });
+
+            peer.on('close', () => {
+              // Peer connection closed
+            });
           }
           return;
         }
@@ -1205,11 +1326,18 @@
           currentWs.close();
         });
 
-        peer.on('data', handleIncomingData);
+        peer.on('data', (data) => {
+          // Wrap async handler to avoid blocking SimplePeer
+          handleIncomingData(data).catch(e => console.error('Data handling error:', e));
+        });
 
         peer.on('error', (err) => {
           console.error('Peer error:', err);
           showError('Connection failed. Please try again.');
+        });
+
+        peer.on('close', () => {
+          // Peer connection closed
         });
 
         // Send ready signal to trigger sender's offer
@@ -1294,6 +1422,7 @@
     let incomingFileInfo = null;
     let fileStream = null;
     let writer = null;
+    let writeQueue = Promise.resolve();
 
     function startSending() {
       isTransferring = true;
@@ -1307,13 +1436,13 @@
       transferStatus.textContent = 'Sending';
       transferFilename.textContent = selectedFile.name;
 
-      // Send file info first
+      // Send file info first (with magic prefix)
       const fileInfo = {
         type: 'file-info',
         name: selectedFile.name,
         size: selectedFile.size
       };
-      peer.send(JSON.stringify(fileInfo));
+      peer.send(CTRL_PREFIX + JSON.stringify(fileInfo));
 
       // Start sending chunks
       sendFileChunks();
@@ -1324,68 +1453,113 @@
       let sentBytes = 0;
 
       const sendChunk = async () => {
-        const { done, value } = await reader.read();
-        
-        if (done) {
-          peer.send(JSON.stringify({ type: 'file-complete' }));
-          showTransferComplete('File sent successfully');
-          return;
-        }
-
-        // Send in 64KB chunks
-        let offset = 0;
-        while (offset < value.length) {
-          const chunk = value.slice(offset, offset + CHUNK_SIZE);
+        try {
+          const { done, value } = await reader.read();
           
-          // Wait for buffer to drain if needed (backpressure)
-          while (peer._channel && peer._channel.bufferedAmount > CHUNK_SIZE * 4) {
-            await new Promise(resolve => setTimeout(resolve, 10));
+          if (done) {
+            peer.send(CTRL_PREFIX + JSON.stringify({ type: 'file-complete' }));
+            showTransferComplete('File sent successfully');
+            return;
           }
 
-          peer.send(chunk);
-          offset += chunk.length;
-          sentBytes += chunk.length;
-          bytesTransferred = sentBytes;
+          // Send in 64KB chunks
+          let offset = 0;
+          while (offset < value.length) {
+            const chunk = value.slice(offset, offset + CHUNK_SIZE);
+            
+            // Wait for buffer to drain if needed (backpressure)
+            while (peer._channel && peer._channel.bufferedAmount > CHUNK_SIZE * 4) {
+              await new Promise(resolve => setTimeout(resolve, 10));
+            }
 
-          updateProgress(sentBytes, selectedFile.size);
+            peer.send(chunk);
+            offset += chunk.length;
+            sentBytes += chunk.length;
+            bytesTransferred = sentBytes;
+
+            updateProgress(sentBytes, selectedFile.size);
+          }
+
+          // Continue with next chunk
+          sendChunk();
+        } catch (error) {
+          console.error('Send error:', error);
         }
-
-        // Continue with next chunk
-        sendChunk();
       };
 
       sendChunk();
     }
 
-    function handleIncomingData(data) {
-      // String messages are always control messages (JSON)
-      if (typeof data === 'string') {
+    async function handleIncomingData(data) {
+      try {
+        const constructorName = data?.constructor?.name || 'unknown';
+        
+        // Convert Blob to ArrayBuffer if needed (some browsers send as Blob)
+        if (data instanceof Blob || constructorName === 'Blob') {
+          data = await data.arrayBuffer();
+        }
+        
+        // String messages are control messages (JSON)
+        if (typeof data === 'string') {
+          try {
+            const message = JSON.parse(data);
+            handleControlMessage(message);
+          } catch (e) {
+            console.error('Invalid JSON message:', e);
+          }
+          return;
+        }
+
+        // Convert to Uint8Array for consistent handling
+        let bytes;
+        if (data instanceof Uint8Array) {
+          bytes = data;
+        } else if (data instanceof ArrayBuffer || constructorName === 'ArrayBuffer') {
+          bytes = new Uint8Array(data);
+        } else if (data.buffer instanceof ArrayBuffer) {
+          bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+        } else if (ArrayBuffer.isView(data)) {
+          bytes = new Uint8Array(data.buffer);
+        } else {
+          bytes = new Uint8Array(data);
+        }
+        
+        // Check if this is a control message (starts with magic prefix \x00KALSU\x00)
+        const prefixBytes = [0, 75, 65, 76, 83, 85, 0];
+        const hasPrefix = bytes.length > 7 && prefixBytes.every((b, i) => bytes[i] === b);
+        
+        if (hasPrefix) {
+          try {
+            const text = new TextDecoder().decode(bytes.slice(7));
+            const message = JSON.parse(text);
+            handleControlMessage(message);
+            return;
+          } catch (e) {
+            console.error('Failed to parse control message:', e);
+          }
+        }
+        
+        // Binary data - file chunk
+        if (writer && incomingFileInfo) {
+          bytesTransferred += bytes.length;
+          updateProgress(bytesTransferred, incomingFileInfo.size);
+          
+          writeQueue = writeQueue.then(() => writer.write(bytes)).catch(e => {
+            console.error('Write error:', e);
+          });
+          return;
+        }
+
+        // Binary data but no writer yet - try to decode as control message
         try {
-          const message = JSON.parse(data);
+          const text = new TextDecoder().decode(bytes);
+          const message = JSON.parse(text);
           handleControlMessage(message);
         } catch (e) {
-          console.error('Invalid JSON message:', e);
+          console.error('Unexpected data before file-info');
         }
-        return;
-      }
-
-      // Binary data - check if we're expecting file chunks
-      if (writer && incomingFileInfo) {
-        // File chunk - write directly
-        const chunk = data instanceof Uint8Array ? data : new Uint8Array(data);
-        writer.write(chunk);
-        bytesTransferred += chunk.length;
-        updateProgress(bytesTransferred, incomingFileInfo.size);
-        return;
-      }
-
-      // Binary data but no writer yet - might be a control message as bytes
-      try {
-        const text = new TextDecoder().decode(data);
-        const message = JSON.parse(text);
-        handleControlMessage(message);
-      } catch (e) {
-        console.error('Unexpected binary data before file-info');
+      } catch (error) {
+        console.error('Data handling error:', error);
       }
     }
 
@@ -1405,6 +1579,7 @@
         isTransferring = true;
         transferStartTime = Date.now();
         bytesTransferred = 0;
+        writeQueue = Promise.resolve();
 
         // Show transfer overlay
         transferOverlay.classList.remove('hidden');
@@ -1422,8 +1597,15 @@
       }
 
       if (message.type === 'file-complete') {
-        writer.close();
-        showTransferComplete('File saved successfully');
+        // Wait for all pending writes to complete before closing
+        writeQueue.then(() => {
+          return writer.close();
+        }).then(() => {
+          showTransferComplete('File saved successfully');
+        }).catch(e => {
+          console.error('Close error:', e);
+          showTransferComplete('File saved');
+        });
         return;
       }
     }

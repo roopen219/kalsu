@@ -19,4 +19,6 @@
       "simple": { "limit": 5, "period": 10 }
     }
   ]
+  // Note: TURNSTILE_SECRET must be set via: wrangler secret put TURNSTILE_SECRET
+  // Get your secret key from: https://dash.cloudflare.com/?to=/:account/turnstile
 }
