@@ -128,11 +128,27 @@ app.get('/api/room/:passphrase', async (c) => {
   }
 })
 
-// WebSocket upgrade route
+// WebSocket upgrade route (Turnstile protected)
 app.get('/ws/:passphrase', async (c) => {
   const upgradeHeader = c.req.header('Upgrade')
   if (!upgradeHeader || upgradeHeader !== 'websocket') {
     return c.text('Expected Upgrade: websocket', 426)
+  }
+
+  // Verify Turnstile token from query parameter
+  const turnstileToken = c.req.query('token')
+  if (!turnstileToken) {
+    return c.text('Security verification required', 403)
+  }
+
+  const ip = c.req.header('cf-connecting-ip')
+  if (!ip) {
+    return c.text('Unable to identify client', 400)
+  }
+
+  const isValid = await verifyTurnstile(turnstileToken, c.env.TURNSTILE_SECRET, ip)
+  if (!isValid) {
+    return c.text('Security verification failed', 403)
   }
 
   const passphrase = c.req.param('passphrase')

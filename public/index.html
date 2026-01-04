@@ -941,9 +941,9 @@
       return data.passphrase;
     }
 
-    function getWebSocketUrl(code) {
+    function getWebSocketUrl(code, token) {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      return `${protocol}//${window.location.host}/ws/${code}`;
+      return `${protocol}//${window.location.host}/ws/${code}?token=${encodeURIComponent(token)}`;
     }
 
     // Turnstile initialization
@@ -975,7 +975,8 @@
       // If we have a token, return it
       if (turnstileToken) {
         const token = turnstileToken;
-        // Reset for next use
+        turnstileToken = null; // Clear to prevent reuse
+        // Reset widget for next use
         if (turnstileWidgetId !== null) {
           turnstile.reset(turnstileWidgetId);
         }
@@ -990,6 +991,7 @@
         const checkToken = () => {
           if (turnstileToken) {
             const token = turnstileToken;
+            turnstileToken = null; // Clear to prevent reuse
             if (turnstileWidgetId !== null) {
               turnstile.reset(turnstileWidgetId);
             }
@@ -1134,7 +1136,7 @@
         passphrase = await fetchPassphrase();
         passphraseText.textContent = passphrase;
         passphraseHint.textContent = 'Click to copy';
-        connectAsSender();
+        await connectAsSender();
       } catch (error) {
         console.error('Passphrase generation failed:', error);
         passphraseText.textContent = 'error';
@@ -1211,7 +1213,7 @@
         }
         
         // Room exists, connect
-        connectAsReceiver(code);
+        await connectAsReceiver(code);
       } catch (err) {
         console.error('Room validation error:', err);
         showError('Could not validate code. Please try again.');
@@ -1225,9 +1227,19 @@
     });
 
     // WebSocket & WebRTC
-    function connectAsSender() {
+    async function connectAsSender() {
+      // Get Turnstile token for WebSocket connection
+      let token;
+      try {
+        token = await getTurnstileToken();
+      } catch (e) {
+        showSenderError('Security verification failed. Please refresh and try again.');
+        resetState();
+        return;
+      }
+
       // Store reference to THIS websocket to detect stale handlers
-      const currentWs = new WebSocket(getWebSocketUrl(passphrase));
+      const currentWs = new WebSocket(getWebSocketUrl(passphrase, token));
       ws = currentWs;
 
       currentWs.onopen = () => {
@@ -1302,9 +1314,19 @@
       };
     }
 
-    function connectAsReceiver(code) {
+    async function connectAsReceiver(code) {
+      // Get Turnstile token for WebSocket connection
+      let token;
+      try {
+        token = await getTurnstileToken();
+      } catch (e) {
+        showError('Security verification failed. Please refresh and try again.');
+        resetState();
+        return;
+      }
+
       // Store reference to THIS websocket to detect stale handlers
-      const currentWs = new WebSocket(getWebSocketUrl(code));
+      const currentWs = new WebSocket(getWebSocketUrl(code, token));
       ws = currentWs;
 
       currentWs.onopen = () => {
