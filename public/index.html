@@ -1510,7 +1510,9 @@
     }
 
     getFileBtn.addEventListener('click', async () => {
-      const code = passphraseInput.value.trim().toLowerCase();
+      // Clean up the code: trim and remove trailing dashes
+      let code = passphraseInput.value.trim().toLowerCase();
+      code = code.replace(/-+$/, ''); // Remove trailing dashes
       if (!code) return;
       
       errorMessage.classList.add('hidden');
@@ -1577,8 +1579,8 @@
       // Prevent consecutive dashes
       value = value.replace(/-+/g, '-');
       
-      // Remove leading/trailing dashes
-      value = value.replace(/^-+|-+$/g, '');
+      // Remove leading dashes (always)
+      value = value.replace(/^-+/, '');
       
       // Limit to 3 dashes (4 words max)
       const dashCount = (value.match(/-/g) || []).length;
@@ -1600,6 +1602,9 @@
           value = value.substring(0, dashIndex);
         }
       }
+      
+      // Note: We don't remove trailing dashes here to allow users to type "word1-" while typing the next word
+      // Trailing dashes will be handled by the server-side validation if needed
       
       // Update value if changed
       if (value !== input.value) {
