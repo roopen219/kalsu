@@ -64,20 +64,32 @@
     }
 
     .logo {
-      font-size: 2.5rem;
-      font-weight: 800;
+      font-size: 2.25rem;
+      font-weight: 600;
       background: linear-gradient(135deg, var(--emerald-400), var(--teal-400));
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
-      letter-spacing: -0.02em;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
     }
 
     .subtitle {
-      color: var(--text-muted);
-      font-size: 0.875rem;
-      margin-top: 0.25rem;
+      color: var(--text-secondary);
+      font-size: 0.9375rem;
+      margin-top: 0.375rem;
       font-weight: 500;
+    }
+
+    .subtitle-desc {
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      margin-top: 0.5rem;
+      font-weight: 400;
+      max-width: 320px;
+      margin-left: auto;
+      margin-right: auto;
+      line-height: 1.5;
     }
 
     /* Switcher */
@@ -620,11 +632,16 @@
       }
 
       .logo {
-        font-size: 2rem;
+        font-size: 1.75rem;
       }
 
       .subtitle {
-        font-size: 0.75rem;
+        font-size: 0.8125rem;
+      }
+
+      .subtitle-desc {
+        font-size: 0.6875rem;
+        max-width: 280px;
       }
 
       .header {
@@ -694,13 +711,114 @@
     .error-message i { font-size: 18px; }
     .get-btn i { font-size: 18px; }
     .transfer-complete-icon i { font-size: 32px; }
+
+    /* Hint text */
+    .hint-text {
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      margin-top: 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.375rem;
+    }
+
+    .hint-text i {
+      font-size: 14px;
+      color: var(--emerald-400);
+      opacity: 0.7;
+    }
+
+    .hint-text--left {
+      justify-content: flex-start;
+    }
+
+    /* Security badge style hint */
+    .security-hint {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      color: var(--text-muted);
+      font-size: 0.6875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.375rem 0.625rem;
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid rgba(16, 185, 129, 0.15);
+      border-radius: 100px;
+      margin-top: 0.75rem;
+    }
+
+    .security-hint i {
+      font-size: 12px;
+      color: var(--emerald-400);
+    }
+
+    /* Button loading state */
+    .btn-loading {
+      position: relative;
+      pointer-events: none;
+    }
+
+    .btn-loading .btn-text {
+      opacity: 0.7;
+    }
+
+    @keyframes subtle-pulse {
+      0%, 100% { opacity: 0.7; }
+      50% { opacity: 1; }
+    }
+
+    .btn-loading {
+      animation: subtle-pulse 1.5s ease-in-out infinite;
+    }
+
+    /* Footer enhanced */
+    .footer-security {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.5rem;
+    }
+
+    .footer-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      color: var(--text-muted);
+      font-size: 0.6875rem;
+    }
+
+    .footer-badge i {
+      font-size: 12px;
+      color: var(--emerald-400);
+      opacity: 0.6;
+    }
+
+    .footer-divider {
+      color: var(--border-primary);
+      font-size: 0.5rem;
+    }
+
+    @media (max-width: 480px) {
+      .footer-security {
+        gap: 0.375rem;
+      }
+
+      .footer-badge {
+        font-size: 0.625rem;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <header class="header">
-      <h1 class="logo">Kalsu</h1>
-      <p class="subtitle">Direct P2P Transfer</p>
+      <h1 class="logo">KALSU</h1>
+      <p class="subtitle">Send files directly between browsers</p>
+      <p class="subtitle-desc">Powered by WebRTC — the same technology behind Google Meet. No servers store your files.</p>
     </header>
 
     <!-- Mode Switcher -->
@@ -725,6 +843,7 @@
           <p class="dropzone-text"><strong>Click to upload</strong> or drag and drop</p>
           <p class="dropzone-hint">Any file type</p>
         </div>
+        <p class="hint-text"><i class="ph ph-shield-check"></i> Your file stays on your device until someone connects</p>
         <input type="file" class="file-input" id="fileInput">
       </div>
 
@@ -749,7 +868,7 @@
         </div>
 
         <div class="passphrase-section">
-          <div class="passphrase-label">Your Kalsu Code</div>
+          <div class="passphrase-label">Your Secret Code</div>
           <div class="passphrase-code" id="passphraseCode">
             <span id="passphraseText">loading...</span>
             <i class="ph ph-copy-simple"></i>
@@ -761,6 +880,10 @@
           <div class="waiting-spinner"></div>
           <p class="waiting-text">Waiting for receiver to connect...</p>
           <p class="code-expiry" id="codeExpiry">Code valid for <span id="codeExpiryTime">10:00</span></p>
+          <div class="security-hint">
+            <i class="ph ph-lock-simple"></i>
+            Direct transfer · Nothing stored on servers
+          </div>
         </div>
 
         <div class="error-message hidden" id="senderErrorMessage">
@@ -773,12 +896,13 @@
     <!-- Receive Panel -->
     <div class="panel hidden" id="receivePanel">
       <div class="input-group">
-        <input type="text" class="passphrase-input" id="passphraseInput" placeholder="word-word-word-word" autocomplete="off" spellcheck="false">
+        <input type="text" class="passphrase-input" id="passphraseInput" placeholder="secret-code-from-sender" autocomplete="off" spellcheck="false">
         <button class="get-btn" id="getFileBtn">
-          <i class="ph ph-download-simple"></i>
-          Get File
+          <i class="ph ph-download-simple" id="getFileBtnIcon"></i>
+          <span class="btn-text" id="getFileBtnText">Get File</span>
         </button>
       </div>
+      <p class="hint-text hint-text--left"><i class="ph ph-shield-check"></i> Files transfer directly to you, nothing is stored on servers</p>
       <div class="error-message hidden" id="errorMessage">
         <i class="ph ph-warning-circle"></i>
         <span id="errorText">Connection failed. Please check the code and try again.</span>
@@ -789,7 +913,13 @@
     <div id="turnstile-container" style="display: none;"></div>
 
     <footer class="footer">
-      <p>Files are transferred directly between browsers. Nothing is stored on servers.</p>
+      <div class="footer-security">
+        <span class="footer-badge"><i class="ph ph-lock-simple"></i> End-to-end encrypted</span>
+        <span class="footer-divider">·</span>
+        <span class="footer-badge"><i class="ph ph-arrows-left-right"></i> Peer-to-peer</span>
+        <span class="footer-divider">·</span>
+        <span class="footer-badge"><i class="ph ph-cloud-slash"></i> Nothing stored on servers</span>
+      </div>
     </footer>
   </div>
 
@@ -814,6 +944,10 @@
             <span class="transfer-stat-value" id="transferEta">--:--</span>
           </div>
         </div>
+        <div class="security-hint" style="margin-top: 1.25rem;">
+          <i class="ph ph-lock-simple"></i>
+          Secure transfer · Nothing stored
+        </div>
       </div>
 
       <!-- Complete state -->
@@ -823,6 +957,10 @@
         </div>
         <div class="transfer-complete-text">Transfer Complete!</div>
         <div class="transfer-complete-hint" id="transferCompleteHint">File sent successfully</div>
+        <div class="security-hint" id="transferSecurityHint">
+          <i class="ph ph-shield-check"></i>
+          <span id="transferSecurityText">No copy was stored on any server</span>
+        </div>
         <button class="close-btn" id="closeTransferBtn">Done</button>
       </div>
     </div>
@@ -891,7 +1029,10 @@
     const transferSpeed = document.getElementById('transferSpeed');
     const transferEta = document.getElementById('transferEta');
     const transferCompleteHint = document.getElementById('transferCompleteHint');
+    const transferSecurityText = document.getElementById('transferSecurityText');
     const closeTransferBtn = document.getElementById('closeTransferBtn');
+    const getFileBtnText = document.getElementById('getFileBtnText');
+    const getFileBtnIcon = document.getElementById('getFileBtnIcon');
 
     // Utility functions
     function formatBytes(bytes) {
@@ -1028,7 +1169,11 @@
         // Clear receiver-specific state only
         errorMessage.classList.add('hidden');
         passphraseInput.value = '';
+        // Reset button state
         getFileBtn.disabled = false;
+        getFileBtn.classList.remove('btn-loading');
+        getFileBtnText.textContent = 'Get File';
+        getFileBtnIcon.className = 'ph ph-download-simple';
       } else {
         switcherBg.classList.add('receive');
         receiveBtn.classList.add('active');
@@ -1077,7 +1222,11 @@
       transferOverlay.classList.add('hidden');
       passphraseInput.value = '';
       fileInput.value = '';
-      getFileBtn.disabled = false; // Re-enable Get File button
+      // Reset Get File button state
+      getFileBtn.disabled = false;
+      getFileBtn.classList.remove('btn-loading');
+      getFileBtnText.textContent = 'Get File';
+      getFileBtnIcon.className = 'ph ph-download-simple';
     }
 
     sendBtn.addEventListener('click', () => switchMode('send'));
@@ -1171,12 +1320,27 @@
     });
 
     // Receiver
+    // Helper to set button loading state
+    function setButtonLoading(loading) {
+      if (loading) {
+        getFileBtn.disabled = true;
+        getFileBtn.classList.add('btn-loading');
+        getFileBtnText.textContent = 'Verifying...';
+        getFileBtnIcon.className = 'ph ph-spinner';
+      } else {
+        getFileBtn.disabled = false;
+        getFileBtn.classList.remove('btn-loading');
+        getFileBtnText.textContent = 'Get File';
+        getFileBtnIcon.className = 'ph ph-download-simple';
+      }
+    }
+
     getFileBtn.addEventListener('click', async () => {
       const code = passphraseInput.value.trim().toLowerCase();
       if (!code) return;
       
       errorMessage.classList.add('hidden');
-      getFileBtn.disabled = true;
+      setButtonLoading(true);
 
       // Validate room exists before connecting
       try {
@@ -1185,6 +1349,7 @@
         try {
           token = await getTurnstileToken();
         } catch (e) {
+          setButtonLoading(false);
           showError('Security verification failed. Please refresh and try again.');
           return;
         }
@@ -1400,7 +1565,7 @@
     function showError(message) {
       errorText.textContent = message;
       errorMessage.classList.remove('hidden');
-      getFileBtn.disabled = false;
+      setButtonLoading(false);
     }
 
     function showSenderError(message) {
@@ -1649,6 +1814,13 @@
       transferProgress.classList.add('hidden');
       transferComplete.classList.remove('hidden');
       transferCompleteHint.textContent = message;
+      
+      // Update security message based on sender/receiver
+      if (currentMode === 'send') {
+        transferSecurityText.textContent = 'No copy was stored on any server';
+      } else {
+        transferSecurityText.textContent = 'Transfer was private and direct';
+      }
     }
 
     closeTransferBtn.addEventListener('click', () => {
