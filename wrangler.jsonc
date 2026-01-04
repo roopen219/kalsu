@@ -4,10 +4,6 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-01-03",
   "assets": { "directory": "public" },
-  "vars": {
-    // Get your Turnstile site key from: https://dash.cloudflare.com/?to=/:account/turnstile
-    "TURNSTILE_SITE_KEY": "YOUR_TURNSTILE_SITE_KEY"
-  },
   "durable_objects": {
     "bindings": [
       { "name": "SIGNALING", "class_name": "SignalingRoom" }
@@ -23,5 +19,8 @@
       "simple": { "limit": 5, "period": 10 }
     }
   ]
-  // Note: TURNSTILE_SECRET must be set via: wrangler secret put TURNSTILE_SECRET
+  // Secrets (set via wrangler secret put):
+  // - TURNSTILE_SITE_KEY: Your Turnstile site key
+  // - TURNSTILE_SECRET: Your Turnstile secret key
+  // Get both from: https://dash.cloudflare.com/?to=/:account/turnstile
 }

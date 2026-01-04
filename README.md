@@ -61,21 +61,14 @@ bun install
 3. Add your domain (e.g., `your-domain.com`)
 4. Copy the **Site Key** and **Secret Key**
 
-### 3. Configure Environment
+### 3. Configure Secrets
 
-Update `wrangler.jsonc` with your Turnstile Site Key:
-
-```jsonc
-{
-  "vars": {
-    "TURNSTILE_SITE_KEY": "your-site-key-here"
-  }
-}
-```
-
-Set the secret key:
+Set both Turnstile keys as secrets:
 
 ```bash
+wrangler secret put TURNSTILE_SITE_KEY
+# Paste your Turnstile site key when prompted
+
 wrangler secret put TURNSTILE_SECRET
 # Paste your Turnstile secret key when prompted
 ```
@@ -111,12 +104,16 @@ bun run cf-typegen
 
 ---
 
-## Environment Variables
+## Secrets
 
-| Variable | Type | Description |
-|----------|------|-------------|
-| `TURNSTILE_SITE_KEY` | var | Cloudflare Turnstile site key (public) |
-| `TURNSTILE_SECRET` | secret | Cloudflare Turnstile secret key |
+Both values are set via `wrangler secret put`:
+
+| Secret | Description |
+|--------|-------------|
+| `TURNSTILE_SITE_KEY` | Cloudflare Turnstile site key |
+| `TURNSTILE_SECRET` | Cloudflare Turnstile secret key |
+
+Get both from [Cloudflare Turnstile Dashboard](https://dash.cloudflare.com/?to=/:account/turnstile).
 
 ---
 

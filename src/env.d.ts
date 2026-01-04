@@ -1,10 +1,10 @@
-// Extend CloudflareBindings with env vars/secrets not auto-generated
+// Extend CloudflareBindings with secrets (set via wrangler secret put)
 declare global {
   interface CloudflareBindings {
-    TURNSTILE_SITE_KEY: string  // Public, in wrangler.jsonc vars
-    TURNSTILE_SECRET: string    // Secret, set via wrangler secret put
+    TURNSTILE_SITE_KEY: string  // Turnstile site key
+    TURNSTILE_SECRET: string    // Turnstile secret key
   }
 }
 
-export {}
+export { }
 
