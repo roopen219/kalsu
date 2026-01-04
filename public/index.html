@@ -1,0 +1,1464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kalsu - Direct P2P Transfer</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%2334d399'/%3E%3Cstop offset='100%25' stop-color='%232dd4bf'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' rx='20' fill='%2309090b'/%3E%3Ctext x='50' y='68' font-family='system-ui' font-size='55' font-weight='800' fill='url(%23g)' text-anchor='middle'%3EK%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="dns-prefetch" href="https://unpkg.com">
+  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&family=JetBrains+Mono:wght@600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg-primary: #09090b;
+      --bg-secondary: #18181b;
+      --bg-tertiary: #27272a;
+      --border-primary: #3f3f46;
+      --border-secondary: #52525b;
+      --text-primary: #fafafa;
+      --text-secondary: #a1a1aa;
+      --text-muted: #71717a;
+      --emerald-400: #34d399;
+      --emerald-500: #10b981;
+      --emerald-600: #059669;
+      --teal-400: #2dd4bf;
+      --teal-500: #14b8a6;
+      --red-400: #f87171;
+      --red-500: #ef4444;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      background-image: 
+        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(16, 185, 129, 0.15), transparent),
+        radial-gradient(ellipse 60% 40% at 50% 120%, rgba(20, 184, 166, 0.1), transparent);
+    }
+
+    .container {
+      width: 100%;
+      max-width: 480px;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+
+    .logo {
+      font-size: 2.5rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--emerald-400), var(--teal-400));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      margin-top: 0.25rem;
+      font-weight: 500;
+    }
+
+    /* Switcher */
+    .switcher {
+      display: flex;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
+      border-radius: 12px;
+      padding: 4px;
+      margin-bottom: 1.5rem;
+      position: relative;
+    }
+
+    .switcher-bg {
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      width: calc(50% - 4px);
+      height: calc(100% - 8px);
+      background: linear-gradient(135deg, var(--emerald-500), var(--teal-500));
+      border-radius: 8px;
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 0;
+    }
+
+    .switcher-bg.receive {
+      transform: translateX(100%);
+    }
+
+    .switcher-btn {
+      flex: 1;
+      padding: 0.75rem 1rem;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: color 0.2s;
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    .switcher-btn.active {
+      color: var(--bg-primary);
+    }
+
+    .switcher-btn:not(.active):hover {
+      color: var(--text-primary);
+    }
+
+    /* Panel */
+    .panel {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
+      border-radius: 16px;
+      padding: 1.5rem;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .panel.hidden {
+      display: none;
+    }
+
+    /* General hidden utility */
+    .hidden {
+      display: none !important;
+    }
+
+    /* Dropzone */
+    .dropzone {
+      border: 2px dashed var(--border-primary);
+      border-radius: 12px;
+      padding: 3rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .dropzone::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, var(--emerald-500), var(--teal-500));
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .dropzone:hover,
+    .dropzone.dragover {
+      border-color: var(--emerald-500);
+    }
+
+    .dropzone:hover::before,
+    .dropzone.dragover::before {
+      opacity: 0.05;
+    }
+
+    .dropzone.dragover {
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { border-color: var(--emerald-500); }
+      50% { border-color: var(--teal-400); }
+    }
+
+    .dropzone-icon {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 1rem;
+      color: var(--text-muted);
+      transition: color 0.2s;
+    }
+
+    .dropzone:hover .dropzone-icon {
+      color: var(--emerald-400);
+    }
+
+    .dropzone-text {
+      color: var(--text-secondary);
+      font-size: 0.9375rem;
+    }
+
+    .dropzone-text strong {
+      color: var(--emerald-400);
+      font-weight: 600;
+    }
+
+    .dropzone-hint {
+      color: var(--text-muted);
+      font-size: 0.8125rem;
+      margin-top: 0.5rem;
+    }
+
+    .file-input {
+      display: none;
+    }
+
+    /* File Card */
+    .file-card {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem;
+      background: var(--bg-tertiary);
+      border-radius: 10px;
+      margin-bottom: 1.5rem;
+    }
+
+    .file-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--emerald-500), var(--teal-500));
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--bg-primary);
+      flex-shrink: 0;
+    }
+
+    .file-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .file-name {
+      font-weight: 600;
+      font-size: 0.9375rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .file-size {
+      color: var(--text-muted);
+      font-size: 0.8125rem;
+      margin-top: 2px;
+    }
+
+    .file-remove {
+      width: 32px;
+      height: 32px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+
+    .file-remove:hover {
+      background: rgba(239, 68, 68, 0.1);
+      color: var(--red-400);
+    }
+
+    /* Large file warning */
+    .large-file-warning {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem;
+      background: rgba(251, 191, 36, 0.1);
+      border: 1px solid rgba(251, 191, 36, 0.3);
+      border-radius: 8px;
+      color: #fbbf24;
+      font-size: 0.8125rem;
+      margin-bottom: 1rem;
+    }
+
+    /* Passphrase */
+    .passphrase-section {
+      text-align: center;
+    }
+
+    .passphrase-label {
+      color: var(--text-muted);
+      font-size: 0.8125rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.75rem;
+    }
+
+    .passphrase-code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.75rem;
+      font-weight: 600;
+      color: var(--emerald-400);
+      background: var(--bg-tertiary);
+      padding: 1rem 1.5rem;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: 1px solid transparent;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .passphrase-code:hover {
+      border-color: var(--emerald-500);
+      background: rgba(16, 185, 129, 0.1);
+    }
+
+    .passphrase-code svg {
+      width: 20px;
+      height: 20px;
+      color: var(--text-muted);
+    }
+
+    .passphrase-hint {
+      color: var(--text-muted);
+      font-size: 0.8125rem;
+      margin-top: 0.75rem;
+    }
+
+    .passphrase-copied {
+      color: var(--emerald-400);
+    }
+
+    /* Waiting state */
+    .waiting-state {
+      text-align: center;
+      padding: 1rem 0;
+    }
+
+    .waiting-spinner {
+      width: 24px;
+      height: 24px;
+      border: 2px solid var(--border-primary);
+      border-top-color: var(--emerald-400);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 1rem;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .waiting-text {
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+    }
+
+    .code-expiry {
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      margin-top: 0.5rem;
+    }
+
+    .code-expiry span {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-secondary);
+    }
+
+    /* Receiver Panel */
+    .input-group {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    .passphrase-input {
+      flex: 1;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-primary);
+      border-radius: 10px;
+      padding: 0.875rem 1rem;
+      color: var(--text-primary);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .passphrase-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .passphrase-input:focus {
+      border-color: var(--emerald-500);
+    }
+
+    .get-btn {
+      background: linear-gradient(135deg, var(--emerald-500), var(--teal-500));
+      border: none;
+      border-radius: 10px;
+      padding: 0.875rem 1.5rem;
+      color: var(--bg-primary);
+      font-family: inherit;
+      font-size: 0.9375rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .get-btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    }
+
+    .get-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Transfer Overlay */
+    .transfer-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(9, 9, 11, 0.95);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      animation: fadeIn 0.3s ease;
+    }
+
+
+    .transfer-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
+      border-radius: 16px;
+      padding: 2rem;
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+    }
+
+    .transfer-status {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--emerald-400);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+    }
+
+    .transfer-filename {
+      font-weight: 600;
+      font-size: 1.125rem;
+      margin-bottom: 1.5rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .progress-container {
+      background: var(--bg-tertiary);
+      border-radius: 8px;
+      height: 8px;
+      overflow: hidden;
+      margin-bottom: 1rem;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--emerald-500), var(--teal-400));
+      border-radius: 8px;
+      transition: width 0.3s ease;
+      position: relative;
+    }
+
+    .progress-bar::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+      animation: shimmer 1.5s infinite;
+    }
+
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+
+    .transfer-stats {
+      display: flex;
+      justify-content: space-between;
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+    }
+
+    .transfer-stat-value {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    /* Complete state */
+    .transfer-complete {
+      padding: 1rem 0;
+    }
+
+    .transfer-complete-icon {
+      width: 64px;
+      height: 64px;
+      background: linear-gradient(135deg, var(--emerald-500), var(--teal-500));
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1rem;
+      color: var(--bg-primary);
+    }
+
+    .transfer-complete-text {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .transfer-complete-hint {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+    }
+
+    .close-btn {
+      margin-top: 1.5rem;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-primary);
+      border-radius: 10px;
+      padding: 0.75rem 2rem;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 0.9375rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .close-btn:hover {
+      background: var(--bg-secondary);
+      border-color: var(--border-secondary);
+    }
+
+    /* Error state */
+    .error-message {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 10px;
+      padding: 1rem;
+      color: var(--red-400);
+      font-size: 0.875rem;
+      margin-top: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+
+    /* Footer */
+    .footer {
+      margin-top: 2rem;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+    }
+
+    .footer a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .footer a:hover {
+      color: var(--emerald-400);
+    }
+
+    /* Prevent button text wrap */
+    .get-btn {
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    /* Mobile responsive */
+    @media (max-width: 480px) {
+      body {
+        padding: 1rem;
+      }
+
+      .logo {
+        font-size: 2rem;
+      }
+
+      .subtitle {
+        font-size: 0.75rem;
+      }
+
+      .header {
+        margin-bottom: 1.5rem;
+      }
+
+      .switcher {
+        margin-bottom: 1rem;
+      }
+
+      .panel {
+        padding: 1rem;
+      }
+
+      .dropzone {
+        padding: 2rem 1rem;
+      }
+
+      .passphrase-code {
+        font-size: 1.25rem;
+        padding: 0.75rem 1rem;
+        word-break: break-all;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      .input-group {
+        flex-direction: column;
+      }
+
+      .get-btn {
+        width: 100%;
+        justify-content: center;
+        padding: 1rem;
+      }
+
+      .transfer-card {
+        margin: 1rem;
+        padding: 1.5rem;
+      }
+
+      .transfer-filename {
+        font-size: 1rem;
+      }
+
+      .file-card {
+        padding: 0.75rem;
+        gap: 0.75rem;
+      }
+
+      .file-name {
+        font-size: 0.875rem;
+      }
+
+      .footer {
+        margin-top: 1.5rem;
+      }
+    }
+
+    /* Phosphor icon sizing */
+    .switcher-btn i { font-size: 18px; line-height: 1; }
+    .dropzone-icon { font-size: 48px; color: var(--text-tertiary); }
+    .file-icon i { font-size: 20px; }
+    .file-remove i { font-size: 18px; }
+    .large-file-warning i { font-size: 16px; }
+    .passphrase-code i { font-size: 18px; color: var(--text-tertiary); }
+    .error-message i { font-size: 18px; }
+    .get-btn i { font-size: 18px; }
+    .transfer-complete-icon i { font-size: 32px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1 class="logo">Kalsu</h1>
+      <p class="subtitle">Direct P2P Transfer</p>
+    </header>
+
+    <!-- Mode Switcher -->
+    <div class="switcher">
+      <div class="switcher-bg" id="switcherBg"></div>
+      <button class="switcher-btn active" id="sendBtn" data-mode="send">
+        <i class="ph ph-upload-simple"></i>
+        Send
+      </button>
+      <button class="switcher-btn" id="receiveBtn" data-mode="receive">
+        <i class="ph ph-download-simple"></i>
+        Receive
+      </button>
+    </div>
+
+    <!-- Send Panel -->
+    <div class="panel" id="sendPanel">
+      <!-- Dropzone (no file selected) -->
+      <div id="dropzoneContainer">
+        <div class="dropzone" id="dropzone">
+          <i class="ph ph-cloud-arrow-up dropzone-icon"></i>
+          <p class="dropzone-text"><strong>Click to upload</strong> or drag and drop</p>
+          <p class="dropzone-hint">Any file type</p>
+        </div>
+        <input type="file" class="file-input" id="fileInput">
+      </div>
+
+      <!-- File selected state -->
+      <div id="fileSelectedContainer" class="hidden">
+        <div class="file-card">
+          <div class="file-icon">
+            <i class="ph ph-file"></i>
+          </div>
+          <div class="file-info">
+            <div class="file-name" id="fileName">document.pdf</div>
+            <div class="file-size" id="fileSize">2.4 MB</div>
+          </div>
+          <button class="file-remove" id="fileRemove">
+            <i class="ph ph-x"></i>
+          </button>
+        </div>
+
+        <div class="large-file-warning hidden" id="largeFileWarning">
+          <i class="ph ph-warning-circle"></i>
+          <span>Large files may take a while to transfer</span>
+        </div>
+
+        <div class="passphrase-section">
+          <div class="passphrase-label">Your Kalsu Code</div>
+          <div class="passphrase-code" id="passphraseCode">
+            <span id="passphraseText">loading...</span>
+            <i class="ph ph-copy-simple"></i>
+          </div>
+          <p class="passphrase-hint" id="passphraseHint">Click to copy</p>
+        </div>
+
+        <div class="waiting-state hidden" id="waitingState">
+          <div class="waiting-spinner"></div>
+          <p class="waiting-text">Waiting for receiver to connect...</p>
+          <p class="code-expiry" id="codeExpiry">Code valid for <span id="codeExpiryTime">10:00</span></p>
+        </div>
+
+        <div class="error-message hidden" id="senderErrorMessage">
+          <i class="ph ph-warning-circle"></i>
+          <span id="senderErrorText">Connection failed. Please try again.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Receive Panel -->
+    <div class="panel hidden" id="receivePanel">
+      <div class="input-group">
+        <input type="text" class="passphrase-input" id="passphraseInput" placeholder="word-word-word-word" autocomplete="off" spellcheck="false">
+        <button class="get-btn" id="getFileBtn">
+          <i class="ph ph-download-simple"></i>
+          Get File
+        </button>
+      </div>
+      <div class="error-message hidden" id="errorMessage">
+        <i class="ph ph-warning-circle"></i>
+        <span id="errorText">Connection failed. Please check the code and try again.</span>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <p>Files are transferred directly between browsers. Nothing is stored on servers.</p>
+    </footer>
+  </div>
+
+  <!-- Transfer Overlay -->
+  <div class="transfer-overlay hidden" id="transferOverlay">
+    <div class="transfer-card">
+      <!-- Progress state -->
+      <div id="transferProgress">
+        <div class="transfer-status" id="transferStatus">Sending</div>
+        <div class="transfer-filename" id="transferFilename">document.pdf</div>
+        <div class="progress-container">
+          <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+        </div>
+        <div class="transfer-stats">
+          <div>
+            <span class="transfer-stat-value" id="transferPercent">0%</span>
+          </div>
+          <div>
+            <span class="transfer-stat-value" id="transferSpeed">0 MB/s</span>
+          </div>
+          <div>
+            <span class="transfer-stat-value" id="transferEta">--:--</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Complete state -->
+      <div class="transfer-complete hidden" id="transferComplete">
+        <div class="transfer-complete-icon">
+          <i class="ph ph-check"></i>
+        </div>
+        <div class="transfer-complete-text">Transfer Complete!</div>
+        <div class="transfer-complete-hint" id="transferCompleteHint">File sent successfully</div>
+        <button class="close-btn" id="closeTransferBtn">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+  <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/streamsaver@2.0.6/StreamSaver.min.js"></script>
+
+  <script>
+    // State
+    let currentMode = 'send';
+    let selectedFile = null;
+    let passphrase = null;
+    let ws = null;
+    let peer = null;
+    let isTransferring = false;
+    let codeExpiryInterval = null;
+    let codeExpirySeconds = 600; // 10 minutes
+
+    // Constants
+    const CHUNK_SIZE = 64 * 1024; // 64KB
+
+    // DOM Elements
+    const switcherBg = document.getElementById('switcherBg');
+    const sendBtn = document.getElementById('sendBtn');
+    const receiveBtn = document.getElementById('receiveBtn');
+    const sendPanel = document.getElementById('sendPanel');
+    const receivePanel = document.getElementById('receivePanel');
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const dropzoneContainer = document.getElementById('dropzoneContainer');
+    const fileSelectedContainer = document.getElementById('fileSelectedContainer');
+    const fileName = document.getElementById('fileName');
+    const fileSize = document.getElementById('fileSize');
+    const fileRemove = document.getElementById('fileRemove');
+    const largeFileWarning = document.getElementById('largeFileWarning');
+    const passphraseCode = document.getElementById('passphraseCode');
+    const passphraseText = document.getElementById('passphraseText');
+    const passphraseHint = document.getElementById('passphraseHint');
+    const waitingState = document.getElementById('waitingState');
+    const codeExpiryTime = document.getElementById('codeExpiryTime');
+    const passphraseInput = document.getElementById('passphraseInput');
+    const getFileBtn = document.getElementById('getFileBtn');
+    const errorMessage = document.getElementById('errorMessage');
+    const errorText = document.getElementById('errorText');
+    const senderErrorMessage = document.getElementById('senderErrorMessage');
+    const senderErrorText = document.getElementById('senderErrorText');
+    const transferOverlay = document.getElementById('transferOverlay');
+    const transferProgress = document.getElementById('transferProgress');
+    const transferComplete = document.getElementById('transferComplete');
+    const transferStatus = document.getElementById('transferStatus');
+    const transferFilename = document.getElementById('transferFilename');
+    const progressBar = document.getElementById('progressBar');
+    const transferPercent = document.getElementById('transferPercent');
+    const transferSpeed = document.getElementById('transferSpeed');
+    const transferEta = document.getElementById('transferEta');
+    const transferCompleteHint = document.getElementById('transferCompleteHint');
+    const closeTransferBtn = document.getElementById('closeTransferBtn');
+
+    // Utility functions
+    function formatBytes(bytes) {
+      if (bytes === 0) return '0 Bytes';
+      const k = 1024;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function formatTime(seconds) {
+      if (!isFinite(seconds) || seconds < 0) return '--:--';
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    async function fetchPassphrase() {
+      const response = await fetch('/api/passphrase');
+      
+      if (response.status === 429) {
+        const data = await response.json();
+        throw new Error(data.error || 'Rate limit exceeded. Please wait a moment.');
+      }
+      
+      if (!response.ok) {
+        throw new Error('Failed to generate code. Please try again.');
+      }
+      
+      const data = await response.json();
+      return data.passphrase;
+    }
+
+    function getWebSocketUrl(code) {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${protocol}//${window.location.host}/ws/${code}`;
+    }
+
+    // Mode switching
+    function switchMode(mode) {
+      if (currentMode === mode) return; // Already on this mode
+      currentMode = mode;
+      
+      if (mode === 'send') {
+        switcherBg.classList.remove('receive');
+        sendBtn.classList.add('active');
+        receiveBtn.classList.remove('active');
+        sendPanel.classList.remove('hidden');
+        receivePanel.classList.add('hidden');
+        // Clear receiver-specific state only
+        errorMessage.classList.add('hidden');
+        passphraseInput.value = '';
+        getFileBtn.disabled = false;
+      } else {
+        switcherBg.classList.add('receive');
+        receiveBtn.classList.add('active');
+        sendBtn.classList.remove('active');
+        receivePanel.classList.remove('hidden');
+        sendPanel.classList.add('hidden');
+        // Clear sender-specific error state only (keep file/passphrase/ws)
+        senderErrorMessage.classList.add('hidden');
+      }
+    }
+
+    function resetState() {
+      if (ws) {
+        ws.close();
+        ws = null;
+      }
+      if (peer) {
+        peer.destroy();
+        peer = null;
+      }
+      
+      // Stop code expiry timer
+      stopCodeExpiryTimer();
+      
+      // Clean up transfer state
+      if (writer) {
+        try { writer.abort(); } catch (e) {}
+        writer = null;
+      }
+      fileStream = null;
+      incomingFileInfo = null;
+      bytesTransferred = 0;
+      transferStartTime = 0;
+      
+      selectedFile = null;
+      passphrase = null;
+      isTransferring = false;
+
+      dropzoneContainer.classList.remove('hidden');
+      fileSelectedContainer.classList.add('hidden');
+      waitingState.classList.add('hidden');
+      errorMessage.classList.add('hidden');
+      senderErrorMessage.classList.add('hidden');
+      largeFileWarning.classList.add('hidden');
+      transferOverlay.classList.add('hidden');
+      passphraseInput.value = '';
+      fileInput.value = '';
+      getFileBtn.disabled = false; // Re-enable Get File button
+    }
+
+    sendBtn.addEventListener('click', () => switchMode('send'));
+    receiveBtn.addEventListener('click', () => switchMode('receive'));
+
+    // File selection
+    dropzone.addEventListener('click', () => fileInput.click());
+    
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    });
+
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('dragover');
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) {
+        handleFileSelect(e.dataTransfer.files[0]);
+      }
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        handleFileSelect(e.target.files[0]);
+      }
+    });
+
+    async function handleFileSelect(file) {
+      selectedFile = file;
+      fileName.textContent = file.name;
+      fileSize.textContent = formatBytes(file.size);
+      
+      dropzoneContainer.classList.add('hidden');
+      fileSelectedContainer.classList.remove('hidden');
+
+      // Show warning for large files (>100MB)
+      const LARGE_FILE_THRESHOLD = 100 * 1024 * 1024; // 100MB
+      if (file.size > LARGE_FILE_THRESHOLD) {
+        largeFileWarning.classList.remove('hidden');
+      } else {
+        largeFileWarning.classList.add('hidden');
+      }
+
+      // Show loading state while fetching passphrase
+      passphraseText.textContent = 'generating...';
+      passphraseHint.textContent = '';
+      passphraseHint.classList.remove('passphrase-copied');
+      passphraseHint.style.color = '';
+
+      try {
+        // Fetch passphrase from server
+        passphrase = await fetchPassphrase();
+        passphraseText.textContent = passphrase;
+        passphraseHint.textContent = 'Click to copy';
+        connectAsSender();
+      } catch (error) {
+        console.error('Passphrase generation failed:', error);
+        passphraseText.textContent = 'error';
+        passphraseHint.textContent = error.message;
+        passphraseHint.style.color = 'var(--red-400)';
+        // Reset after delay to allow retry
+        setTimeout(() => {
+          resetState();
+        }, 3000);
+      }
+    }
+
+    fileRemove.addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent any parent handlers
+      resetState();
+    });
+
+    // Copy passphrase
+    passphraseCode.addEventListener('click', async () => {
+      if (!passphrase) return; // Guard against null passphrase
+      try {
+        await navigator.clipboard.writeText(passphrase);
+        passphraseHint.textContent = 'Copied!';
+        passphraseHint.classList.add('passphrase-copied');
+        setTimeout(() => {
+          passphraseHint.textContent = 'Click to copy';
+          passphraseHint.classList.remove('passphrase-copied');
+        }, 2000);
+      } catch (err) {
+        console.error('Failed to copy:', err);
+      }
+    });
+
+    // Receiver
+    getFileBtn.addEventListener('click', async () => {
+      const code = passphraseInput.value.trim().toLowerCase();
+      if (!code) return;
+      
+      errorMessage.classList.add('hidden');
+      getFileBtn.disabled = true;
+
+      // Validate room exists before connecting
+      try {
+        const response = await fetch(`/api/room/${encodeURIComponent(code)}`);
+        if (response.status === 429) {
+          showError('Too many attempts. Please wait a moment.');
+          return;
+        }
+        const data = await response.json();
+        
+        if (!data.exists) {
+          showError('Invalid code. No sender found with this code.');
+          return;
+        }
+        
+        // Room exists, connect
+        connectAsReceiver(code);
+      } catch (err) {
+        console.error('Room validation error:', err);
+        showError('Could not validate code. Please try again.');
+      }
+    });
+
+    passphraseInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        getFileBtn.click();
+      }
+    });
+
+    // WebSocket & WebRTC
+    function connectAsSender() {
+      // Store reference to THIS websocket to detect stale handlers
+      const currentWs = new WebSocket(getWebSocketUrl(passphrase));
+      ws = currentWs;
+
+      currentWs.onopen = () => {
+        if (ws !== currentWs) return; // Stale connection
+        console.log('Sender connected to signaling server');
+        waitingState.classList.remove('hidden');
+        startCodeExpiryTimer();
+      };
+
+      currentWs.onmessage = (event) => {
+        if (ws !== currentWs) return; // Stale connection
+        const message = JSON.parse(event.data);
+        
+        // Handle peer disconnection
+        if (message.type === 'peer-disconnected') {
+          showSenderError('Receiver disconnected.');
+          return;
+        }
+        
+        // Check if this is a "ready" notification from receiver
+        if (message.type === 'ready') {
+          console.log('Receiver is ready, creating peer connection');
+          
+          if (!peer) {
+            // Create peer as initiator - this will generate an offer
+            peer = new SimplePeer({ initiator: true, trickle: false });
+            
+            peer.on('signal', (data) => {
+              console.log('Sender sending signal:', data.type);
+              if (currentWs.readyState === WebSocket.OPEN) {
+                currentWs.send(JSON.stringify(data));
+              }
+            });
+
+            peer.on('connect', () => {
+              console.log('P2P connected');
+              stopCodeExpiryTimer();
+              currentWs.close();
+              startSending();
+            });
+
+            peer.on('error', (err) => {
+              console.error('Peer error:', err);
+            });
+          }
+          return;
+        }
+
+        // This is a SimplePeer signal (answer from receiver)
+        if (peer && (message.type === 'answer' || message.sdp || message.candidate)) {
+          console.log('Sender received signal:', message.type);
+          peer.signal(message);
+        }
+      };
+
+      currentWs.onerror = () => {
+        if (ws !== currentWs) return; // Stale connection
+        console.error('WebSocket error');
+        showSenderError('Connection failed. Please try again.');
+      };
+
+      currentWs.onclose = () => {
+        console.log('WebSocket closed');
+        // Only show error if this is still the active connection and peer isn't connected
+        if (ws === currentWs && (!peer || !peer.connected)) {
+          showSenderError('Connection lost. Please try again.');
+        }
+      };
+    }
+
+    function connectAsReceiver(code) {
+      // Store reference to THIS websocket to detect stale handlers
+      const currentWs = new WebSocket(getWebSocketUrl(code));
+      ws = currentWs;
+
+      currentWs.onopen = () => {
+        if (ws !== currentWs) return; // Stale connection
+        console.log('Receiver connected to signaling server');
+        
+        // Room already validated via API, create peer immediately
+        peer = new SimplePeer({ initiator: false, trickle: false });
+
+        peer.on('signal', (data) => {
+          console.log('Receiver sending signal:', data.type);
+          if (currentWs.readyState === WebSocket.OPEN) {
+            currentWs.send(JSON.stringify(data));
+          }
+        });
+
+        peer.on('connect', () => {
+          console.log('P2P connected');
+          currentWs.close();
+        });
+
+        peer.on('data', handleIncomingData);
+
+        peer.on('error', (err) => {
+          console.error('Peer error:', err);
+          showError('Connection failed. Please try again.');
+        });
+
+        // Send ready signal to trigger sender's offer
+        currentWs.send(JSON.stringify({ type: 'ready' }));
+      };
+
+      currentWs.onmessage = (event) => {
+        if (ws !== currentWs) return; // Stale connection
+        const message = JSON.parse(event.data);
+        
+        // Handle peer disconnection
+        if (message.type === 'peer-disconnected') {
+          showError('Sender disconnected. The transfer was cancelled.');
+          return;
+        }
+        
+        // Only process SimplePeer signals (offer from sender)
+        if (peer && (message.type === 'offer' || message.sdp || message.candidate)) {
+          console.log('Receiver received signal:', message.type);
+          peer.signal(message);
+        }
+      };
+
+      currentWs.onerror = () => {
+        if (ws !== currentWs) return; // Stale connection
+        showError('Could not connect. Check the code and try again.');
+      };
+
+      currentWs.onclose = () => {
+        console.log('WebSocket closed');
+        // Only show error if this is still the active connection and peer isn't connected
+        if (ws === currentWs && (!peer || !peer.connected)) {
+          showError('Connection lost. Please try again.');
+        }
+      };
+    }
+
+    function showError(message) {
+      errorText.textContent = message;
+      errorMessage.classList.remove('hidden');
+      getFileBtn.disabled = false;
+    }
+
+    function showSenderError(message) {
+      senderErrorText.textContent = message;
+      senderErrorMessage.classList.remove('hidden');
+      waitingState.classList.add('hidden');
+      stopCodeExpiryTimer();
+    }
+
+    function startCodeExpiryTimer() {
+      codeExpirySeconds = 600; // 10 minutes
+      updateCodeExpiryDisplay();
+      
+      codeExpiryInterval = setInterval(() => {
+        codeExpirySeconds--;
+        updateCodeExpiryDisplay();
+        
+        if (codeExpirySeconds <= 0) {
+          stopCodeExpiryTimer();
+          showSenderError('Code expired. Please select your file again.');
+        }
+      }, 1000);
+    }
+
+    function stopCodeExpiryTimer() {
+      if (codeExpiryInterval) {
+        clearInterval(codeExpiryInterval);
+        codeExpiryInterval = null;
+      }
+    }
+
+    function updateCodeExpiryDisplay() {
+      const mins = Math.floor(codeExpirySeconds / 60);
+      const secs = codeExpirySeconds % 60;
+      codeExpiryTime.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    // File transfer
+    let transferStartTime = 0;
+    let bytesTransferred = 0;
+    let incomingFileInfo = null;
+    let fileStream = null;
+    let writer = null;
+
+    function startSending() {
+      isTransferring = true;
+      transferStartTime = Date.now();
+      bytesTransferred = 0;
+
+      // Show transfer overlay
+      transferOverlay.classList.remove('hidden');
+      transferProgress.classList.remove('hidden');
+      transferComplete.classList.add('hidden');
+      transferStatus.textContent = 'Sending';
+      transferFilename.textContent = selectedFile.name;
+
+      // Send file info first
+      const fileInfo = {
+        type: 'file-info',
+        name: selectedFile.name,
+        size: selectedFile.size
+      };
+      peer.send(JSON.stringify(fileInfo));
+
+      // Start sending chunks
+      sendFileChunks();
+    }
+
+    async function sendFileChunks() {
+      const reader = selectedFile.stream().getReader();
+      let sentBytes = 0;
+
+      const sendChunk = async () => {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          peer.send(JSON.stringify({ type: 'file-complete' }));
+          showTransferComplete('File sent successfully');
+          return;
+        }
+
+        // Send in 64KB chunks
+        let offset = 0;
+        while (offset < value.length) {
+          const chunk = value.slice(offset, offset + CHUNK_SIZE);
+          
+          // Wait for buffer to drain if needed (backpressure)
+          while (peer._channel && peer._channel.bufferedAmount > CHUNK_SIZE * 4) {
+            await new Promise(resolve => setTimeout(resolve, 10));
+          }
+
+          peer.send(chunk);
+          offset += chunk.length;
+          sentBytes += chunk.length;
+          bytesTransferred = sentBytes;
+
+          updateProgress(sentBytes, selectedFile.size);
+        }
+
+        // Continue with next chunk
+        sendChunk();
+      };
+
+      sendChunk();
+    }
+
+    function handleIncomingData(data) {
+      // String messages are always control messages (JSON)
+      if (typeof data === 'string') {
+        try {
+          const message = JSON.parse(data);
+          handleControlMessage(message);
+        } catch (e) {
+          console.error('Invalid JSON message:', e);
+        }
+        return;
+      }
+
+      // Binary data - check if we're expecting file chunks
+      if (writer && incomingFileInfo) {
+        // File chunk - write directly
+        const chunk = data instanceof Uint8Array ? data : new Uint8Array(data);
+        writer.write(chunk);
+        bytesTransferred += chunk.length;
+        updateProgress(bytesTransferred, incomingFileInfo.size);
+        return;
+      }
+
+      // Binary data but no writer yet - might be a control message as bytes
+      try {
+        const text = new TextDecoder().decode(data);
+        const message = JSON.parse(text);
+        handleControlMessage(message);
+      } catch (e) {
+        console.error('Unexpected binary data before file-info');
+      }
+    }
+
+    function handleControlMessage(message) {
+      // Handle peer disconnection during transfer
+      if (message.type === 'peer-disconnected') {
+        if (writer) {
+          try { writer.abort(); } catch (e) {}
+        }
+        transferOverlay.classList.add('hidden');
+        showError('The other device disconnected. Transfer cancelled.');
+        return;
+      }
+      
+      if (message.type === 'file-info') {
+        incomingFileInfo = message;
+        isTransferring = true;
+        transferStartTime = Date.now();
+        bytesTransferred = 0;
+
+        // Show transfer overlay
+        transferOverlay.classList.remove('hidden');
+        transferProgress.classList.remove('hidden');
+        transferComplete.classList.add('hidden');
+        transferStatus.textContent = 'Receiving';
+        transferFilename.textContent = message.name;
+
+        // Setup StreamSaver
+        fileStream = streamSaver.createWriteStream(message.name, {
+          size: message.size
+        });
+        writer = fileStream.getWriter();
+        return;
+      }
+
+      if (message.type === 'file-complete') {
+        writer.close();
+        showTransferComplete('File saved successfully');
+        return;
+      }
+    }
+
+    function updateProgress(current, total) {
+      const percent = Math.round((current / total) * 100);
+      const elapsed = (Date.now() - transferStartTime) / 1000;
+      const speed = current / elapsed;
+      const remaining = (total - current) / speed;
+
+      progressBar.style.width = `${percent}%`;
+      transferPercent.textContent = `${percent}%`;
+      transferSpeed.textContent = `${formatBytes(speed)}/s`;
+      transferEta.textContent = formatTime(remaining);
+    }
+
+    function showTransferComplete(message) {
+      isTransferring = false;
+      transferProgress.classList.add('hidden');
+      transferComplete.classList.remove('hidden');
+      transferCompleteHint.textContent = message;
+    }
+
+    closeTransferBtn.addEventListener('click', () => {
+      resetState();
+    });
+
+    // Prevent accidental navigation during transfer
+    window.addEventListener('beforeunload', (e) => {
+      if (isTransferring) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+  </script>
+</body>
+</html>
+
