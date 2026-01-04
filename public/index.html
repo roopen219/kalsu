@@ -1096,6 +1096,7 @@
     let turnstileInitPromise = null;
     let tokenRequestQueue = [];
     let processingTokenRequest = false;
+    let pendingToken = null; // Token from initial render (before request queued)
 
     // DOM Elements
     const switcherBg = document.getElementById('switcherBg');
@@ -1240,6 +1241,8 @@
         // Render widget (Managed mode - may show checkbox if Cloudflare deems necessary)
         turnstileWidgetId = turnstile.render('#turnstile-container', {
           sitekey: turnstileSiteKey,
+          theme: 'dark', // Match our dark UI
+          appearance: 'interaction-only', // Only show widget when user interaction is required
           retry: 'auto',
           'refresh-expired': 'auto',
           callback: (token) => {
@@ -1251,10 +1254,15 @@
               processingTokenRequest = false;
               // Process next request in queue if any
               processNextTokenRequest();
+            } else {
+              // Token received before request was queued (initial render)
+              // Store it for the next request
+              pendingToken = token;
             }
           },
           'expired-callback': () => {
-            // Token expired - reject current request
+            // Token expired - clear pending token and reject current request
+            pendingToken = null;
             if (tokenRequestQueue.length > 0) {
               const { reject, timeout } = tokenRequestQueue.shift();
               clearTimeout(timeout);
@@ -1264,13 +1272,15 @@
               processNextTokenRequest();
             }
           },
-          'error-callback': () => {
-            // Error occurred - reject current request
+          'error-callback': (errorCode) => {
+            // Error occurred - reject current request with details
+            console.error('Turnstile error:', errorCode);
+            pendingToken = null;
             if (tokenRequestQueue.length > 0) {
               const { reject, timeout } = tokenRequestQueue.shift();
               clearTimeout(timeout);
               processingTokenRequest = false;
-              reject(new Error('Turnstile verification failed'));
+              reject(new Error(`Turnstile verification failed: ${errorCode || 'unknown error'}`));
               // Process next request in queue if any
               processNextTokenRequest();
             }
@@ -1289,8 +1299,19 @@
         return;
       }
 
+      // If we have a pending token from initial render, use it immediately
+      if (pendingToken) {
+        const token = pendingToken;
+        pendingToken = null;
+        const { resolve, timeout } = tokenRequestQueue.shift();
+        clearTimeout(timeout);
+        resolve(token);
+        // Process next request if any
+        processNextTokenRequest();
+        return;
+      }
+
       processingTokenRequest = true;
-      const { timeout } = tokenRequestQueue[0];
 
       // Reset widget to get a fresh token
       if (turnstileWidgetId !== null) {
@@ -1305,6 +1326,7 @@
 
       // Return a promise that resolves when we get a token via callback
       return new Promise((resolve, reject) => {
+        // 30 second timeout - allows time for user interaction in Managed mode
         const timeout = setTimeout(() => {
           // Remove this request from queue if it's still there
           const index = tokenRequestQueue.findIndex(req => req.resolve === resolve);
@@ -1314,9 +1336,9 @@
               processingTokenRequest = false;
               processNextTokenRequest();
             }
-            reject(new Error('Turnstile verification timed out'));
+            reject(new Error('Turnstile verification timed out. Please try again.'));
           }
-        }, 10000); // 10 second timeout
+        }, 30000); // 30 second timeout for user interaction
 
         // Add to queue
         const request = { resolve, reject, timeout };
