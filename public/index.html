@@ -1001,8 +1001,8 @@
       </div>
     </div>
 
-    <!-- Invisible Turnstile widget -->
-    <div id="turnstile-container" style="position: absolute; visibility: hidden; pointer-events: none;"></div>
+    <!-- Turnstile widget (Managed mode - may show interactive challenge) -->
+    <div id="turnstile-container" style="position: fixed; bottom: 1rem; right: 1rem; z-index: 1000;"></div>
 
     <footer class="footer">
       <div class="footer-security">
@@ -1237,9 +1237,11 @@
           attempts++;
         }
         
-        // Render widget (invisible, will be reset for each token request)
+        // Render widget (Managed mode - may show checkbox if Cloudflare deems necessary)
         turnstileWidgetId = turnstile.render('#turnstile-container', {
           sitekey: turnstileSiteKey,
+          retry: 'auto',
+          'refresh-expired': 'auto',
           callback: (token) => {
             // Resolve the current request in the queue
             if (tokenRequestQueue.length > 0) {
