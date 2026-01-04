@@ -13,7 +13,17 @@ interface TurnstileResponse {
   'error-codes'?: string[]
 }
 
+// Cloudflare Turnstile test keys for local development
+const TURNSTILE_TEST_SITE_KEY = '1x00000000000000000000BB' // Always passes (invisible widget)
+const TURNSTILE_TEST_SECRET = '1x0000000000000000000000000000000AA' // Always passes validation
+
 async function verifyTurnstile(token: string, secret: string, ip: string): Promise<boolean> {
+  // In local development with test keys, always return true (skip API call)
+  if (secret === TURNSTILE_TEST_SECRET) {
+    console.log('Local development: Using Turnstile test key (always passes)')
+    return true
+  }
+  
   try {
     const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
       method: 'POST',
@@ -60,27 +70,41 @@ app.use(
 
 // API: Get public config (Turnstile site key)
 app.get('/api/config', (c) => {
+  const isDevelopment = c.env.APP_ENV === 'development'
+  const siteKey = isDevelopment ? TURNSTILE_TEST_SITE_KEY : c.env.TURNSTILE_SITE_KEY
+  
   return c.json({
-    turnstileSiteKey: c.env.TURNSTILE_SITE_KEY
+    turnstileSiteKey: siteKey
   })
 })
 
 // API: Generate passphrase (rate limited + Turnstile protected)
 app.get('/api/passphrase', async (c) => {
-  const ip = c.req.header('cf-connecting-ip')
+  const isDevelopment = c.env.APP_ENV === 'development'
+  
+  // Skip Turnstile verification in development
+  if (!isDevelopment) {
+    const ip = c.req.header('cf-connecting-ip')
+    if (!ip) {
+      return c.json({ error: 'Unable to identify client.' }, 400)
+    }
+    
+    // Verify Turnstile token
+    const turnstileToken = c.req.header('x-turnstile-token')
+    if (!turnstileToken) {
+      return c.json({ error: 'Security verification required.' }, 403)
+    }
+    
+    const isValid = await verifyTurnstile(turnstileToken, c.env.TURNSTILE_SECRET, ip)
+    if (!isValid) {
+      return c.json({ error: 'Security verification failed.' }, 403)
+    }
+  }
+  
+  // For rate limiting, use IP or fallback to localhost in development
+  const ip = c.req.header('cf-connecting-ip') || (isDevelopment ? '127.0.0.1' : null)
   if (!ip) {
     return c.json({ error: 'Unable to identify client.' }, 400)
-  }
-  
-  // Verify Turnstile token
-  const turnstileToken = c.req.header('x-turnstile-token')
-  if (!turnstileToken) {
-    return c.json({ error: 'Security verification required.' }, 403)
-  }
-  
-  const isValid = await verifyTurnstile(turnstileToken, c.env.TURNSTILE_SECRET, ip)
-  if (!isValid) {
-    return c.json({ error: 'Security verification failed.' }, 403)
   }
   
   const { success } = await c.env.PASSPHRASE_RATE_LIMITER.limit({ key: ip })
@@ -94,20 +118,31 @@ app.get('/api/passphrase', async (c) => {
 
 // API: Validate room exists (rate limited + Turnstile protected)
 app.get('/api/room/:passphrase', async (c) => {
-  const ip = c.req.header('cf-connecting-ip')
+  const isDevelopment = c.env.APP_ENV === 'development'
+  
+  // Skip Turnstile verification in development
+  if (!isDevelopment) {
+    const ip = c.req.header('cf-connecting-ip')
+    if (!ip) {
+      return c.json({ error: 'Unable to identify client.' }, 400)
+    }
+    
+    // Verify Turnstile token
+    const turnstileToken = c.req.header('x-turnstile-token')
+    if (!turnstileToken) {
+      return c.json({ error: 'Security verification required.' }, 403)
+    }
+    
+    const isValid = await verifyTurnstile(turnstileToken, c.env.TURNSTILE_SECRET, ip)
+    if (!isValid) {
+      return c.json({ error: 'Security verification failed.' }, 403)
+    }
+  }
+  
+  // For rate limiting, use IP or fallback to localhost in development
+  const ip = c.req.header('cf-connecting-ip') || (isDevelopment ? '127.0.0.1' : null)
   if (!ip) {
     return c.json({ error: 'Unable to identify client.' }, 400)
-  }
-  
-  // Verify Turnstile token
-  const turnstileToken = c.req.header('x-turnstile-token')
-  if (!turnstileToken) {
-    return c.json({ error: 'Security verification required.' }, 403)
-  }
-  
-  const isValid = await verifyTurnstile(turnstileToken, c.env.TURNSTILE_SECRET, ip)
-  if (!isValid) {
-    return c.json({ error: 'Security verification failed.' }, 403)
   }
   
   const { success } = await c.env.PASSPHRASE_RATE_LIMITER.limit({ key: ip })
@@ -142,20 +177,25 @@ app.get('/ws/:passphrase', async (c) => {
     return c.text('Expected Upgrade: websocket', 426)
   }
 
-  // Verify Turnstile token from query parameter
-  const turnstileToken = c.req.query('token')
-  if (!turnstileToken) {
-    return c.text('Security verification required', 403)
-  }
+  const isDevelopment = c.env.APP_ENV === 'development'
+  
+  // Skip Turnstile verification in development
+  if (!isDevelopment) {
+    // Verify Turnstile token from query parameter
+    const turnstileToken = c.req.query('token')
+    if (!turnstileToken) {
+      return c.text('Security verification required', 403)
+    }
 
-  const ip = c.req.header('cf-connecting-ip')
-  if (!ip) {
-    return c.text('Unable to identify client', 400)
-  }
+    const ip = c.req.header('cf-connecting-ip')
+    if (!ip) {
+      return c.text('Unable to identify client', 400)
+    }
 
-  const isValid = await verifyTurnstile(turnstileToken, c.env.TURNSTILE_SECRET, ip)
-  if (!isValid) {
-    return c.text('Security verification failed', 403)
+    const isValid = await verifyTurnstile(turnstileToken, c.env.TURNSTILE_SECRET, ip)
+    if (!isValid) {
+      return c.text('Security verification failed', 403)
+    }
   }
 
   const passphrase = c.req.param('passphrase')

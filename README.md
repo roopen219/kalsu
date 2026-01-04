@@ -92,7 +92,19 @@ bun install
 bun run dev
 ```
 
-Note: Turnstile verification requires a deployed environment. For local testing, you may need to temporarily disable Turnstile checks or use Turnstile's test keys.
+**Local Development with Turnstile Test Keys:**
+
+For local development, set `APP_ENV=development` in your `wrangler.jsonc` or pass it via command line:
+
+```bash
+# Option 1: Add to wrangler.jsonc vars section
+# vars: { APP_ENV: "development" }
+
+# Option 2: Use wrangler dev with --env flag
+wrangler dev --env development
+```
+
+When `APP_ENV=development`, the app automatically uses Cloudflare Turnstile test keys, so you don't need to set up real Turnstile keys for local testing.
 
 ### Generate Types
 

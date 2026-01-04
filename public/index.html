@@ -458,6 +458,11 @@
       border-color: var(--emerald-500);
     }
 
+    /* Hide search input clear button */
+    .passphrase-input[type="search"]::-webkit-search-cancel-button {
+      display: none;
+    }
+
     .get-btn {
       background: linear-gradient(135deg, var(--emerald-500), var(--teal-500));
       border: none;
@@ -625,6 +630,43 @@
       display: flex;
       align-items: center;
       gap: 0.75rem;
+    }
+
+    .error-message span {
+      flex: 1;
+    }
+
+    .retry-btn {
+      background: linear-gradient(135deg, var(--emerald-500), var(--teal-500));
+      border: none;
+      border-radius: 8px;
+      padding: 0.5rem 1rem;
+      color: var(--bg-primary);
+      font-family: inherit;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      white-space: nowrap;
+      flex-shrink: 0;
+      min-height: 44px; /* Mobile-friendly touch target */
+    }
+
+    .retry-btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    }
+
+    .retry-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .retry-btn i {
+      font-size: 16px;
     }
 
 
@@ -935,6 +977,10 @@
         <div class="error-message hidden" id="senderErrorMessage">
           <i class="ph ph-warning-circle"></i>
           <span id="senderErrorText">Connection failed. Please try again.</span>
+          <button class="retry-btn" id="senderRetryBtn">
+            <i class="ph ph-arrow-clockwise"></i>
+            Retry
+          </button>
         </div>
       </div>
     </div>
@@ -942,8 +988,8 @@
     <!-- Receive Panel -->
     <div class="panel hidden" id="receivePanel">
       <div class="input-group">
-        <input type="text" class="passphrase-input" id="passphraseInput" placeholder="secret-code-from-sender" autocomplete="off" spellcheck="false">
-        <button class="get-btn" id="getFileBtn">
+        <input type="search" inputmode="text" class="passphrase-input" id="passphraseInput" placeholder="secret-code-from-sender" autocomplete="off" spellcheck="false">
+        <button class="get-btn" id="getFileBtn" disabled>
           <i class="ph ph-download-simple" id="getFileBtnIcon"></i>
           <span class="btn-text" id="getFileBtnText">Get File</span>
         </button>
@@ -1076,6 +1122,7 @@
     const errorText = document.getElementById('errorText');
     const senderErrorMessage = document.getElementById('senderErrorMessage');
     const senderErrorText = document.getElementById('senderErrorText');
+    const senderRetryBtn = document.getElementById('senderRetryBtn');
     const transferOverlay = document.getElementById('transferOverlay');
     const transferProgress = document.getElementById('transferProgress');
     const transferComplete = document.getElementById('transferComplete');
@@ -1164,6 +1211,14 @@
             const response = await fetch('/api/config');
             const config = await response.json();
             turnstileSiteKey = config.turnstileSiteKey;
+            
+            // Log if using test keys (local development)
+            const isLocalhost = window.location.hostname === 'localhost' || 
+                               window.location.hostname === '127.0.0.1' ||
+                               window.location.hostname.includes('localhost');
+            if (isLocalhost && turnstileSiteKey.startsWith('1x00000000000000000000')) {
+              console.log('🔧 Local development mode: Using Cloudflare Turnstile test keys');
+            }
           } catch (e) {
             console.error('Failed to fetch config:', e);
             turnstileInitPromise = null;
@@ -1286,8 +1341,8 @@
         // Clear receiver-specific state only
         errorMessage.classList.add('hidden');
         passphraseInput.value = '';
-        // Reset button state
-        getFileBtn.disabled = false;
+        // Reset button state (disabled since input is empty)
+        getFileBtn.disabled = true;
         getFileBtn.classList.remove('btn-loading');
         getFileBtnText.textContent = 'Get File';
         getFileBtnIcon.className = 'ph ph-download-simple';
@@ -1339,8 +1394,8 @@
       transferOverlay.classList.add('hidden');
       passphraseInput.value = '';
       fileInput.value = '';
-      // Reset Get File button state
-      getFileBtn.disabled = false;
+      // Reset Get File button state (disabled since input is empty)
+      getFileBtn.disabled = true;
       getFileBtn.classList.remove('btn-loading');
       getFileBtnText.textContent = 'Get File';
       getFileBtnIcon.className = 'ph ph-download-simple';
@@ -1445,7 +1500,9 @@
         getFileBtnText.textContent = 'Verifying...';
         getFileBtnIcon.className = 'ph ph-spinner';
       } else {
-        getFileBtn.disabled = false;
+        // Only enable if input has value
+        const hasValue = passphraseInput.value.trim().length > 0;
+        getFileBtn.disabled = !hasValue;
         getFileBtn.classList.remove('btn-loading');
         getFileBtnText.textContent = 'Get File';
         getFileBtnIcon.className = 'ph ph-download-simple';
@@ -1502,8 +1559,76 @@
       }
     });
 
+    // Format passphrase input (auto lowercase, auto dash, validation)
+    function formatPassphraseInput() {
+      const input = passphraseInput;
+      const cursorPos = input.selectionStart;
+      let value = input.value;
+      
+      // Convert to lowercase
+      value = value.toLowerCase();
+      
+      // Replace spaces with dashes
+      value = value.replace(/\s+/g, '-');
+      
+      // Remove invalid characters (keep only a-z and -)
+      value = value.replace(/[^a-z-]/g, '');
+      
+      // Prevent consecutive dashes
+      value = value.replace(/-+/g, '-');
+      
+      // Remove leading/trailing dashes
+      value = value.replace(/^-+|-+$/g, '');
+      
+      // Limit to 3 dashes (4 words max)
+      const dashCount = (value.match(/-/g) || []).length;
+      if (dashCount > 3) {
+        // Find the 4th dash (after the 4th word) and remove everything from that position
+        let dashIndex = -1;
+        let dashNum = 0;
+        for (let i = 0; i < value.length; i++) {
+          if (value[i] === '-') {
+            dashNum++;
+            if (dashNum === 4) {
+              dashIndex = i;
+              break;
+            }
+          }
+        }
+        if (dashIndex !== -1) {
+          // Truncate before the 4th dash, keeping all 4 words
+          value = value.substring(0, dashIndex);
+        }
+      }
+      
+      // Update value if changed
+      if (value !== input.value) {
+        input.value = value;
+        // Try to preserve cursor position
+        const newCursorPos = Math.min(cursorPos, value.length);
+        input.setSelectionRange(newCursorPos, newCursorPos);
+      }
+      
+      // Update button state
+      const hasValue = value.trim().length > 0;
+      if (!getFileBtn.classList.contains('btn-loading')) {
+        getFileBtn.disabled = !hasValue;
+      }
+    }
+
+    // Enable/disable Get File button based on input
+    passphraseInput.addEventListener('input', formatPassphraseInput);
+    
+    // Format pasted content
+    passphraseInput.addEventListener('paste', (e) => {
+      // Let paste happen first, then format
+      setTimeout(() => {
+        formatPassphraseInput();
+      }, 0);
+    });
+
     passphraseInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
+      if (e.key === 'Enter' && !getFileBtn.disabled) {
         getFileBtn.click();
       }
     });
@@ -1515,7 +1640,7 @@
       try {
         token = await getTurnstileToken();
       } catch (e) {
-        showSenderError('Security verification failed. Please refresh and try again.');
+        showSenderError('Security verification failed. Please refresh and try again.', false);
         resetState();
         return;
       }
@@ -1537,7 +1662,7 @@
         
         // Handle peer disconnection
         if (message.type === 'peer-disconnected') {
-          showSenderError('Receiver disconnected.');
+          showSenderError('Receiver disconnected.', false);
           return;
         }
         
@@ -1584,14 +1709,14 @@
       currentWs.onerror = () => {
         if (ws !== currentWs) return; // Stale connection
         console.error('WebSocket error');
-        showSenderError('Connection failed. Please try again.');
+        showSenderError('Connection failed. Please try again.', true);
       };
 
       currentWs.onclose = () => {
         console.log('WebSocket closed');
         // Only show error if this is still the active connection and peer isn't connected
         if (ws === currentWs && (!peer || !peer.connected)) {
-          showSenderError('Connection lost. Please try again.');
+          showSenderError('Connection lost. Please try again.', true);
         }
       };
     }
@@ -1685,12 +1810,90 @@
       setButtonLoading(false);
     }
 
-    function showSenderError(message) {
+    function showSenderError(message, showRetry = true) {
       senderErrorText.textContent = message;
       senderErrorMessage.classList.remove('hidden');
       waitingState.classList.add('hidden');
       stopCodeExpiryTimer();
+      
+      // Show/hide retry button
+      if (showRetry) {
+        senderRetryBtn.classList.remove('hidden');
+      } else {
+        senderRetryBtn.classList.add('hidden');
+      }
     }
+
+    async function retrySenderConnection() {
+      // Hide error message
+      senderErrorMessage.classList.add('hidden');
+      
+      // Check if file is still selected
+      if (!selectedFile) {
+        showSenderError('File no longer selected. Please select a file again.', false);
+        return;
+      }
+      
+      // Show loading state on retry button
+      senderRetryBtn.disabled = true;
+      const originalContent = senderRetryBtn.innerHTML;
+      senderRetryBtn.innerHTML = '<i class="ph ph-spinner"></i> Retrying...';
+      
+      try {
+        // Clear existing connections
+        if (ws) {
+          ws.close();
+          ws = null;
+        }
+        if (peer) {
+          peer.destroy();
+          peer = null;
+        }
+        
+        // Check if this is a code expiry retry (need to regenerate passphrase)
+        const isCodeExpired = codeExpirySeconds <= 0;
+        
+        if (isCodeExpired) {
+          // Regenerate passphrase
+          passphraseText.textContent = 'generating...';
+          passphraseHint.textContent = '';
+          passphraseHint.classList.remove('passphrase-copied');
+          passphraseHint.style.color = '';
+          
+          try {
+            passphrase = await fetchPassphrase();
+            passphraseText.textContent = passphrase;
+            passphraseHint.textContent = 'Click to copy';
+          } catch (error) {
+            console.error('Passphrase regeneration failed:', error);
+            passphraseText.textContent = 'error';
+            passphraseHint.textContent = error.message;
+            passphraseHint.style.color = 'var(--red-400)';
+            showSenderError('Failed to regenerate code. Please try again.', true);
+            senderRetryBtn.disabled = false;
+            senderRetryBtn.innerHTML = originalContent;
+            return;
+          }
+        }
+        
+        // Reconnect
+        await connectAsSender();
+        
+        // Reset retry button state
+        senderRetryBtn.disabled = false;
+        senderRetryBtn.innerHTML = originalContent;
+      } catch (error) {
+        console.error('Retry failed:', error);
+        showSenderError('Retry failed. Please try again.', true);
+        senderRetryBtn.disabled = false;
+        senderRetryBtn.innerHTML = originalContent;
+      }
+    }
+
+    // Retry button click handler
+    senderRetryBtn.addEventListener('click', () => {
+      retrySenderConnection();
+    });
 
     function startCodeExpiryTimer() {
       codeExpirySeconds = 600; // 10 minutes
@@ -1702,7 +1905,7 @@
         
         if (codeExpirySeconds <= 0) {
           stopCodeExpiryTimer();
-          showSenderError('Code expired. Please select your file again.');
+          showSenderError('Code expired. Please try again.', true);
         }
       }, 1000);
     }
