@@ -58,6 +58,13 @@ app.use(
   }
 )
 
+// API: Get public config (Turnstile site key)
+app.get('/api/config', (c) => {
+  return c.json({
+    turnstileSiteKey: c.env.TURNSTILE_SITE_KEY
+  })
+})
+
 // API: Generate passphrase (rate limited + Turnstile protected)
 app.get('/api/passphrase', async (c) => {
   const ip = c.req.header('cf-connecting-ip')

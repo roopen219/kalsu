@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Kalsu - Direct P2P Transfer</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%2334d399'/%3E%3Cstop offset='100%25' stop-color='%232dd4bf'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' rx='20' fill='%2309090b'/%3E%3Ctext x='50' y='68' font-family='system-ui' font-size='55' font-weight='800' fill='url(%23g)' text-anchor='middle'%3EK%3C/text%3E%3C/svg%3E">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://challenges.cloudflare.com">
@@ -802,6 +802,25 @@
       font-size: 0.5rem;
     }
 
+    .footer-links {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+    }
+
+    .footer-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.6875rem;
+      transition: color 0.2s;
+    }
+
+    .footer-links a:hover {
+      color: var(--emerald-400);
+    }
+
     @media (max-width: 480px) {
       .footer-security {
         gap: 0.375rem;
@@ -920,6 +939,13 @@
         <span class="footer-divider">·</span>
         <span class="footer-badge"><i class="ph ph-cloud-slash"></i> Nothing stored on servers</span>
       </div>
+      <div class="footer-links">
+        <a href="/privacy.html">Privacy</a>
+        <span class="footer-divider">·</span>
+        <a href="/terms.html">Terms</a>
+        <span class="footer-divider">·</span>
+        <a href="https://github.com/roopen219/kalsu" target="_blank" rel="noopener">GitHub</a>
+      </div>
     </footer>
   </div>
 
@@ -987,12 +1013,12 @@
     const CHUNK_SIZE = 64 * 1024; // 64KB
     // Magic prefix: null byte + KALSU + null byte (very unlikely in real files)
     const CTRL_PREFIX = '\x00KALSU\x00';
-    // Turnstile site key (replace with your actual site key)
-    const TURNSTILE_SITE_KEY = '0x4AAAAAACKaqR40OLwEBEXs';
 
-    // Turnstile state
+    // Turnstile state (site key fetched from server)
+    let turnstileSiteKey = null;
     let turnstileToken = null;
     let turnstileWidgetId = null;
+    let turnstileReady = false;
 
     // DOM Elements
     const switcherBg = document.getElementById('switcherBg');
@@ -1088,15 +1114,28 @@
     }
 
     // Turnstile initialization
-    function initTurnstile() {
+    async function initTurnstile() {
+      // Fetch site key from server
+      if (!turnstileSiteKey) {
+        try {
+          const response = await fetch('/api/config');
+          const config = await response.json();
+          turnstileSiteKey = config.turnstileSiteKey;
+        } catch (e) {
+          console.error('Failed to fetch config:', e);
+          setTimeout(initTurnstile, 1000);
+          return;
+        }
+      }
+
+      // Wait for Turnstile script to load
       if (typeof turnstile === 'undefined') {
-        // Turnstile not loaded yet, retry
         setTimeout(initTurnstile, 100);
         return;
       }
       
       turnstileWidgetId = turnstile.render('#turnstile-container', {
-        sitekey: TURNSTILE_SITE_KEY,
+        sitekey: turnstileSiteKey,
         callback: (token) => {
           turnstileToken = token;
         },
@@ -1109,10 +1148,30 @@
           turnstileToken = null;
         }
       });
+      
+      turnstileReady = true;
     }
 
     // Get a fresh Turnstile token (with retry)
     async function getTurnstileToken() {
+      // Wait for Turnstile to be ready first
+      if (!turnstileReady) {
+        await new Promise((resolve, reject) => {
+          let attempts = 0;
+          const checkReady = () => {
+            if (turnstileReady) {
+              resolve();
+            } else if (attempts >= 50) {
+              reject(new Error('Turnstile initialization timed out'));
+            } else {
+              attempts++;
+              setTimeout(checkReady, 100);
+            }
+          };
+          checkReady();
+        });
+      }
+
       // If we have a token, return it
       if (turnstileToken) {
         const token = turnstileToken;

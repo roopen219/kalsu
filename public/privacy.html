@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy - KALSU</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg-primary: #09090b;
+      --bg-secondary: #18181b;
+      --border-primary: #3f3f46;
+      --text-primary: #fafafa;
+      --text-secondary: #a1a1aa;
+      --text-muted: #71717a;
+      --emerald-400: #34d399;
+      --teal-400: #2dd4bf;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      padding: 2rem;
+      line-height: 1.7;
+    }
+
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.875rem;
+      margin-bottom: 2rem;
+      transition: color 0.2s;
+    }
+
+    .back-link:hover {
+      color: var(--emerald-400);
+    }
+
+    .logo {
+      font-size: 1.5rem;
+      font-weight: 600;
+      background: linear-gradient(135deg, var(--emerald-400), var(--teal-400));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .last-updated {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      margin-bottom: 2.5rem;
+    }
+
+    h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-top: 2.5rem;
+      margin-bottom: 1rem;
+      color: var(--text-primary);
+    }
+
+    p {
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+    }
+
+    ul {
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+      padding-left: 1.5rem;
+    }
+
+    li {
+      margin-bottom: 0.5rem;
+    }
+
+    strong {
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    a {
+      color: var(--emerald-400);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .highlight-box {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
+      border-radius: 8px;
+      padding: 1.25rem;
+      margin: 1.5rem 0;
+    }
+
+    .highlight-box p {
+      margin-bottom: 0;
+    }
+
+    @media (max-width: 480px) {
+      body {
+        padding: 1rem;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+      }
+
+      h2 {
+        font-size: 1.125rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back-link">← Back to KALSU</a>
+    
+    <div class="logo">KALSU</div>
+    <h1>Privacy Policy</h1>
+    <p class="last-updated">Last updated: January 2025</p>
+
+    <div class="highlight-box">
+      <p><strong>The short version:</strong> KALSU transfers files directly between browsers using WebRTC. Your files never touch our servers. We don't store, access, or analyze any files you transfer.</p>
+    </div>
+
+    <h2>1. How KALSU Works</h2>
+    <p>KALSU is a peer-to-peer (P2P) file transfer service. When you send a file:</p>
+    <ul>
+      <li>Your file stays on your device until a receiver connects</li>
+      <li>Files transfer directly from your browser to the receiver's browser using WebRTC</li>
+      <li>Our servers only facilitate the initial connection (signaling) — they never see or store your files</li>
+      <li>Once the connection is established, data flows directly between browsers</li>
+    </ul>
+
+    <h2>2. Data We Do NOT Collect</h2>
+    <p>We do not collect, store, or have access to:</p>
+    <ul>
+      <li><strong>Your files</strong> — Files transfer directly between browsers via WebRTC</li>
+      <li><strong>File contents</strong> — We cannot see what you're transferring</li>
+      <li><strong>File names or metadata</strong> — This information is exchanged directly between peers</li>
+      <li><strong>Personal information</strong> — We don't require accounts, emails, or any personal data</li>
+      <li><strong>Usage analytics</strong> — We don't track what files you transfer or how often</li>
+    </ul>
+
+    <h2>3. Data That Is Processed</h2>
+    <p>To provide the service, some technical data is necessarily processed:</p>
+    <ul>
+      <li><strong>IP Addresses:</strong> Your IP address is visible to the person you're transferring files with (this is inherent to WebRTC P2P connections). Our signaling server temporarily sees IP addresses to facilitate connections but does not log them.</li>
+      <li><strong>Connection Codes:</strong> The random 4-word codes used to connect sender and receiver are temporarily stored in memory during the transfer session (maximum 10 minutes) and are automatically deleted afterward.</li>
+    </ul>
+
+    <h2>4. Cloudflare Turnstile</h2>
+    <p>We use Cloudflare Turnstile to protect against bots and abuse. Turnstile may:</p>
+    <ul>
+      <li>Set cookies necessary for its operation</li>
+      <li>Collect device and browser information to verify you're human</li>
+      <li>Process your IP address</li>
+    </ul>
+    <p>This data is processed by Cloudflare according to their <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">Privacy Policy</a>.</p>
+
+    <h2>5. Cookies</h2>
+    <p>KALSU itself does not set any cookies. However, Cloudflare Turnstile may set cookies necessary for bot protection. These are not used for tracking or advertising.</p>
+
+    <h2>6. Third-Party Services</h2>
+    <p>KALSU runs on Cloudflare's infrastructure. By using KALSU, you also agree to:</p>
+    <ul>
+      <li><a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">Cloudflare's Privacy Policy</a></li>
+    </ul>
+
+    <h2>7. WebRTC and IP Addresses</h2>
+    <p>WebRTC (the technology that enables direct browser-to-browser transfers) requires exchanging connection information between peers. This means:</p>
+    <ul>
+      <li>The person you're transferring files with can see your IP address</li>
+      <li>Your IP address may reveal your approximate geographic location</li>
+      <li>If you're concerned about IP privacy, consider using a VPN</li>
+    </ul>
+    <p>This is a fundamental aspect of P2P technology and is what allows files to transfer directly without going through our servers.</p>
+
+    <h2>8. Data Retention</h2>
+    <p>We do not retain any user data. Connection codes exist only in memory during active sessions and are automatically deleted after 10 minutes or when the transfer completes.</p>
+
+    <h2>9. Children's Privacy</h2>
+    <p>KALSU is not directed at children under 13. We do not knowingly collect any information from children.</p>
+
+    <h2>10. Changes to This Policy</h2>
+    <p>We may update this Privacy Policy from time to time. Changes will be posted on this page with an updated "Last updated" date.</p>
+
+    <h2>11. Open Source</h2>
+    <p>KALSU is open source. You can review our code and verify our privacy practices at <a href="https://github.com/roopen219/kalsu" target="_blank" rel="noopener">github.com/roopen219/kalsu</a>.</p>
+
+    <h2>12. Contact</h2>
+    <p>If you have questions about this Privacy Policy, please open an issue on our <a href="https://github.com/roopen219/kalsu/issues" target="_blank" rel="noopener">GitHub repository</a>.</p>
+  </div>
+</body>
+</html>
+

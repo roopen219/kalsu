@@ -1,0 +1,19 @@
+{
+  "$schema": "https://deploy.workers.cloudflare.com/button/schema.json",
+  "name": "KALSU",
+  "description": "P2P file transfer directly between browsers using WebRTC",
+  "icon": "https://kalsu.download/favicon.svg",
+  "secretsFields": [
+    {
+      "name": "TURNSTILE_SECRET",
+      "description": "Cloudflare Turnstile secret key. Get it from: https://dash.cloudflare.com/?to=/:account/turnstile"
+    }
+  ],
+  "varsFields": [
+    {
+      "name": "TURNSTILE_SITE_KEY",
+      "description": "Cloudflare Turnstile site key (public). Get it from: https://dash.cloudflare.com/?to=/:account/turnstile"
+    }
+  ]
+}
+
