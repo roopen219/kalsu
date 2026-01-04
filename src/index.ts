@@ -61,7 +61,8 @@ app.use(
         fontSrc: ["'self'", 'https://fonts.gstatic.com'],
         connectSrc: ["'self'", 'wss:', 'ws:', 'https://challenges.cloudflare.com'],
         frameSrc: ['https://challenges.cloudflare.com'],
-        imgSrc: ["'self'", 'data:'],
+        childSrc: ['https://challenges.cloudflare.com'],
+        imgSrc: ["'self'", 'data:', 'https://challenges.cloudflare.com'],
         objectSrc: ["'none'"],
       },
     })(c, next)
