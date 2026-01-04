@@ -79,28 +79,9 @@ app.get('/api/config', (c) => {
   })
 })
 
-// API: Generate passphrase (rate limited + Turnstile protected)
+// API: Generate passphrase (rate limited)
 app.get('/api/passphrase', async (c) => {
   const isDevelopment = c.env.APP_ENV === 'development'
-  
-  // Skip Turnstile verification in development
-  if (!isDevelopment) {
-    const ip = c.req.header('cf-connecting-ip')
-    if (!ip) {
-      return c.json({ error: 'Unable to identify client.' }, 400)
-    }
-    
-    // Verify Turnstile token
-    const turnstileToken = c.req.header('x-turnstile-token')
-    if (!turnstileToken) {
-      return c.json({ error: 'Security verification required.' }, 403)
-    }
-    
-    const isValid = await verifyTurnstile(turnstileToken, c.env.TURNSTILE_SECRET, ip)
-    if (!isValid) {
-      return c.json({ error: 'Security verification failed.' }, 403)
-    }
-  }
   
   // For rate limiting, use IP or fallback to localhost in development
   const ip = c.req.header('cf-connecting-ip') || (isDevelopment ? '127.0.0.1' : null)
@@ -115,60 +96,6 @@ app.get('/api/passphrase', async (c) => {
 
   const passphrase = generatePassphrase(4)
   return c.json({ passphrase })
-})
-
-// API: Validate room exists (rate limited + Turnstile protected)
-app.get('/api/room/:passphrase', async (c) => {
-  const isDevelopment = c.env.APP_ENV === 'development'
-  
-  // Skip Turnstile verification in development
-  if (!isDevelopment) {
-    const ip = c.req.header('cf-connecting-ip')
-    if (!ip) {
-      return c.json({ error: 'Unable to identify client.' }, 400)
-    }
-    
-    // Verify Turnstile token
-    const turnstileToken = c.req.header('x-turnstile-token')
-    if (!turnstileToken) {
-      return c.json({ error: 'Security verification required.' }, 403)
-    }
-    
-    const isValid = await verifyTurnstile(turnstileToken, c.env.TURNSTILE_SECRET, ip)
-    if (!isValid) {
-      return c.json({ error: 'Security verification failed.' }, 403)
-    }
-  }
-  
-  // For rate limiting, use IP or fallback to localhost in development
-  const ip = c.req.header('cf-connecting-ip') || (isDevelopment ? '127.0.0.1' : null)
-  if (!ip) {
-    return c.json({ error: 'Unable to identify client.' }, 400)
-  }
-  
-  const { success } = await c.env.PASSPHRASE_RATE_LIMITER.limit({ key: ip })
-  if (!success) {
-    return c.json({ error: 'Rate limit exceeded. Try again later.' }, 429)
-  }
-
-  const passphrase = c.req.param('passphrase')
-  if (!isValidPassphrase(passphrase)) {
-    return c.json({ exists: false })
-  }
-
-  try {
-    const id = c.env.SIGNALING.idFromName(passphrase)
-    const stub = c.env.SIGNALING.get(id)
-    
-    // Call the DO with a status check request (not a WebSocket upgrade)
-    const response = await stub.fetch(new Request('https://internal/status'))
-    const data = await response.json() as { exists: boolean; peerCount: number }
-    
-    return c.json({ exists: data.exists })
-  } catch (error) {
-    console.error('Room validation error:', error)
-    return c.json({ exists: false })
-  }
 })
 
 // WebSocket upgrade route (Turnstile protected)
@@ -201,13 +128,53 @@ app.get('/ws/:passphrase', async (c) => {
 
   const passphrase = c.req.param('passphrase')
   if (!isValidPassphrase(passphrase)) {
-    return c.text('Invalid code format', 400)
+    // Accept WebSocket but send error message and close
+    // This allows frontend to get clear error info
+    const pair = new WebSocketPair()
+    const [client, server] = [pair[0], pair[1]]
+    server.accept()
+    server.send(JSON.stringify({ type: 'error', code: 'INVALID_CODE', message: 'Invalid code format.' }))
+    server.close(4001, 'Invalid code')
+    return new Response(null, { status: 101, webSocket: client })
   }
 
+  // Check role parameter - receivers must have a sender waiting
+  const role = c.req.query('role')
+  
   try {
     // Get the Durable Object stub by passphrase name
     const id = c.env.SIGNALING.idFromName(passphrase)
     const stub = c.env.SIGNALING.get(id)
+    
+    // For receivers, verify a sender exists before allowing connection
+    if (role === 'receiver') {
+      try {
+        const statusResponse = await stub.fetch(new Request('https://internal/status'))
+        const statusData = await statusResponse.json() as { exists: boolean; peerCount: number }
+        
+        // Receiver can only connect if sender exists (peerCount > 0)
+        if (!statusData.exists || statusData.peerCount === 0) {
+          // Accept WebSocket but send error message and close
+          // This allows frontend to get clear error info
+          const pair = new WebSocketPair()
+          const [client, server] = [pair[0], pair[1]]
+          server.accept()
+          server.send(JSON.stringify({ type: 'error', code: 'INVALID_CODE', message: 'Invalid code. No sender found with this code.' }))
+          server.close(4001, 'Invalid code')
+          return new Response(null, { status: 101, webSocket: client })
+        }
+      } catch (statusError) {
+        console.error('Status check failed:', statusError)
+        // Accept WebSocket but send error message and close
+        const pair = new WebSocketPair()
+        const [client, server] = [pair[0], pair[1]]
+        server.accept()
+        server.send(JSON.stringify({ type: 'error', code: 'SERVER_ERROR', message: 'Could not verify code. Please try again.' }))
+        server.close(4002, 'Server error')
+        return new Response(null, { status: 101, webSocket: client })
+      }
+    }
+    // Senders always allowed (they create the session)
     
     // Forward the request directly to the Durable Object
     return stub.fetch(c.req.raw)
@@ -254,9 +221,9 @@ export class SignalingRoom extends DurableObject<CloudflareBindings> {
     }
 
     // WebSocket upgrade handling below
-    // Max 2 peers per room for P2P transfer
+    // Max 2 peers per connection for P2P transfer
     if (currentPeerCount >= 2) {
-      return new Response('Room full', { status: 429 })
+      return new Response('Connection limit reached', { status: 429 })
     }
 
     // Create WebSocket pair

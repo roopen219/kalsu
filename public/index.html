@@ -899,10 +899,45 @@
         font-size: 0.625rem;
       }
     }
+
+    /* Warning banners */
+    .ios-browser-warning,
+    .media-warning {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem;
+      background: rgba(251, 191, 36, 0.1);
+      border: 1px solid rgba(251, 191, 36, 0.3);
+      border-radius: 8px;
+      color: #fbbf24;
+      font-size: 0.8125rem;
+      line-height: 1.4;
+    }
+
+    .ios-browser-warning {
+      margin-bottom: 1.5rem;
+    }
+
+    .ios-browser-warning i,
+    .media-warning i {
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .media-warning {
+      margin-bottom: 1rem;
+    }
   </style>
 </head>
 <body>
   <div class="container">
+    <!-- iOS Safari persistent warning -->
+    <div class="ios-browser-warning hidden" id="iosBrowserWarning">
+      <i class="ph ph-warning"></i>
+      <span>Keep Safari open until the transfer completes. Switching apps may interrupt downloads.</span>
+    </div>
+
     <header class="header">
       <h1 class="logo">KALSU</h1>
       <p class="subtitle">Send files directly between browsers</p>
@@ -953,6 +988,11 @@
         <div class="large-file-warning hidden" id="largeFileWarning">
           <i class="ph ph-warning-circle"></i>
           <span>Large files may take a while to transfer</span>
+        </div>
+
+        <div class="media-warning hidden" id="senderMediaWarning">
+          <i class="ph ph-warning"></i>
+          <span>Media files may not download correctly if the receiver is using Safari on iPhone/iPad.</span>
         </div>
 
         <div class="passphrase-section">
@@ -1138,6 +1178,8 @@
     const closeTransferBtn = document.getElementById('closeTransferBtn');
     const getFileBtnText = document.getElementById('getFileBtnText');
     const getFileBtnIcon = document.getElementById('getFileBtnIcon');
+    const iosBrowserWarning = document.getElementById('iosBrowserWarning');
+    const senderMediaWarning = document.getElementById('senderMediaWarning');
 
     // Utility functions
     function formatBytes(bytes) {
@@ -1155,28 +1197,26 @@
       return `${mins}:${secs.toString().padStart(2, '0')}`;
     }
 
+    // Detect iOS Safari
+    function isIOSSafari() {
+      const ua = navigator.userAgent;
+      const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+      const isSafari = /Safari/.test(ua) && !/CriOS|FxiOS|OPiOS|EdgiOS/.test(ua);
+      return isIOS && isSafari;
+    }
+
+    // Detect media files (video/audio)
+    function isMediaFile(file) {
+      const mediaExtensions = /\.(mp4|mov|webm|mkv|avi|m4v|mp3|m4a|wav|ogg|flac)$/i;
+      return file.type.startsWith('video/') || file.type.startsWith('audio/') || mediaExtensions.test(file.name);
+    }
+
     async function fetchPassphrase() {
-      // Get Turnstile token first
-      let token;
-      try {
-        token = await getTurnstileToken();
-      } catch (e) {
-        throw new Error('Security verification failed. Please refresh and try again.');
-      }
-      
-      const response = await fetch('/api/passphrase', {
-        headers: {
-          'X-Turnstile-Token': token
-        }
-      });
+      const response = await fetch('/api/passphrase');
       
       if (response.status === 429) {
         const data = await response.json();
         throw new Error(data.error || 'Rate limit exceeded. Please wait a moment.');
-      }
-      
-      if (response.status === 403) {
-        throw new Error('Security verification failed. Please refresh and try again.');
       }
       
       if (!response.ok) {
@@ -1187,9 +1227,9 @@
       return data.passphrase;
     }
 
-    function getWebSocketUrl(code, token) {
+    function getWebSocketUrl(code, token, role) {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      return `${protocol}//${window.location.host}/ws/${code}?token=${encodeURIComponent(token)}`;
+      return `${protocol}//${window.location.host}/ws/${code}?token=${encodeURIComponent(token)}&role=${role}`;
     }
 
     // Turnstile initialization (lazy - only when first needed)
@@ -1415,6 +1455,7 @@
       errorMessage.classList.add('hidden');
       senderErrorMessage.classList.add('hidden');
       largeFileWarning.classList.add('hidden');
+      senderMediaWarning.classList.add('hidden');
       transferOverlay.classList.add('hidden');
       passphraseInput.value = '';
       fileInput.value = '';
@@ -1468,6 +1509,13 @@
         largeFileWarning.classList.remove('hidden');
       } else {
         largeFileWarning.classList.add('hidden');
+      }
+
+      // Show warning for media files (iOS Safari issues)
+      if (isMediaFile(file)) {
+        senderMediaWarning.classList.remove('hidden');
+      } else {
+        senderMediaWarning.classList.add('hidden');
       }
 
       // Show loading state while fetching passphrase
@@ -1524,9 +1572,9 @@
         getFileBtnText.textContent = 'Verifying...';
         getFileBtnIcon.className = 'ph ph-spinner';
       } else {
-        // Only enable if input has value
-        const hasValue = passphraseInput.value.trim().length > 0;
-        getFileBtn.disabled = !hasValue;
+        // Only enable if input has valid format
+        const isValid = isValidPassphraseFormat(passphraseInput.value.trim());
+        getFileBtn.disabled = !isValid;
         getFileBtn.classList.remove('btn-loading');
         getFileBtnText.textContent = 'Get File';
         getFileBtnIcon.className = 'ph ph-download-simple';
@@ -1534,56 +1582,25 @@
     }
 
     getFileBtn.addEventListener('click', async () => {
-      // Clean up the code: trim and remove trailing dashes
-      let code = passphraseInput.value.trim().toLowerCase();
-      code = code.replace(/-+$/, ''); // Remove trailing dashes
-      if (!code) return;
+      const code = passphraseInput.value.trim().toLowerCase();
+      if (!isValidPassphraseFormat(code)) return;
       
       errorMessage.classList.add('hidden');
       setButtonLoading(true);
 
-      // Validate room exists before connecting
+      // Connect directly - error handling happens via WebSocket messages
       try {
-        // Get Turnstile token first
-        let token;
-        try {
-          token = await getTurnstileToken();
-        } catch (e) {
-          setButtonLoading(false);
-          showError('Security verification failed. Please refresh and try again.');
-          return;
-        }
-        
-        const response = await fetch(`/api/room/${encodeURIComponent(code)}`, {
-          headers: {
-            'X-Turnstile-Token': token
-          }
-        });
-        
-        if (response.status === 429) {
-          showError('Too many attempts. Please wait a moment.');
-          return;
-        }
-        
-        if (response.status === 403) {
-          showError('Security verification failed. Please refresh and try again.');
-          return;
-        }
-        
-        const data = await response.json();
-        
-        if (!data.exists) {
-          showError('Invalid code. No sender found with this code.');
-          return;
-        }
-        
-        // Room exists, connect
         await connectAsReceiver(code);
       } catch (err) {
-        console.error('Room validation error:', err);
-        showError('Could not validate code. Please try again.');
+        console.error('Connection error:', err);
+        showError('Could not connect. Please check your internet connection.');
       }
     });
+
+    // Passphrase validation: word-word-word-word format (must have exactly 4 words)
+    function isValidPassphraseFormat(value) {
+      return /^[a-z]+-[a-z]+-[a-z]+-[a-z]+$/.test(value);
+    }
 
     // Format passphrase input (auto lowercase, auto dash, validation)
     function formatPassphraseInput() {
@@ -1627,9 +1644,6 @@
         }
       }
       
-      // Note: We don't remove trailing dashes here to allow users to type "word1-" while typing the next word
-      // Trailing dashes will be handled by the server-side validation if needed
-      
       // Update value if changed
       if (value !== input.value) {
         input.value = value;
@@ -1638,10 +1652,10 @@
         input.setSelectionRange(newCursorPos, newCursorPos);
       }
       
-      // Update button state
-      const hasValue = value.trim().length > 0;
+      // Update button state - only enable if format is valid (word-word-word-word)
+      const isValid = isValidPassphraseFormat(value);
       if (!getFileBtn.classList.contains('btn-loading')) {
-        getFileBtn.disabled = !hasValue;
+        getFileBtn.disabled = !isValid;
       }
     }
 
@@ -1675,7 +1689,7 @@
       }
 
       // Store reference to THIS websocket to detect stale handlers
-      const currentWs = new WebSocket(getWebSocketUrl(passphrase, token));
+      const currentWs = new WebSocket(getWebSocketUrl(passphrase, token, 'sender'));
       ws = currentWs;
 
       currentWs.onopen = () => {
@@ -1762,49 +1776,28 @@
       }
 
       // Store reference to THIS websocket to detect stale handlers
-      const currentWs = new WebSocket(getWebSocketUrl(code, token));
+      const currentWs = new WebSocket(getWebSocketUrl(code, token, 'receiver'));
       ws = currentWs;
+      let wsOpened = false; // Track if WebSocket successfully opened
+      let receivedError = false; // Track if we received an error message
 
       currentWs.onopen = () => {
         if (ws !== currentWs) return; // Stale connection
+        wsOpened = true;
         console.log('Receiver connected to signaling server');
-        
-        // Room already validated via API, create peer immediately
-        peer = new SimplePeer({ initiator: false, trickle: false });
-
-        peer.on('signal', (data) => {
-          console.log('Receiver sending signal:', data.type);
-          if (currentWs.readyState === WebSocket.OPEN) {
-            currentWs.send(JSON.stringify(data));
-          }
-        });
-
-        peer.on('connect', () => {
-          console.log('P2P connected');
-          currentWs.close();
-        });
-
-        peer.on('data', (data) => {
-          // Wrap async handler to avoid blocking SimplePeer
-          handleIncomingData(data).catch(e => console.error('Data handling error:', e));
-        });
-
-        peer.on('error', (err) => {
-          console.error('Peer error:', err);
-          showError('Connection failed. Please try again.');
-        });
-
-        peer.on('close', () => {
-          // Peer connection closed
-        });
-
-        // Send ready signal to trigger sender's offer
-        currentWs.send(JSON.stringify({ type: 'ready' }));
       };
 
       currentWs.onmessage = (event) => {
         if (ws !== currentWs) return; // Stale connection
         const message = JSON.parse(event.data);
+        
+        // Handle error messages from server (e.g., invalid code)
+        if (message.type === 'error') {
+          receivedError = true;
+          // Use the server's message for all error types
+          showError(message.message || 'Could not connect. Please try again.');
+          return;
+        }
         
         // Handle peer disconnection
         if (message.type === 'peer-disconnected') {
@@ -1812,23 +1805,68 @@
           return;
         }
         
-        // Only process SimplePeer signals (offer from sender)
+        // First valid message means we can create peer connection
+        if (!peer && (message.type === 'offer' || message.sdp)) {
+          // Create peer connection on first offer
+          peer = new SimplePeer({ initiator: false, trickle: false });
+
+          peer.on('signal', (data) => {
+            console.log('Receiver sending signal:', data.type);
+            if (currentWs.readyState === WebSocket.OPEN) {
+              currentWs.send(JSON.stringify(data));
+            }
+          });
+
+          peer.on('connect', () => {
+            console.log('P2P connected');
+            currentWs.close();
+          });
+
+          peer.on('data', (data) => {
+            handleIncomingData(data).catch(e => console.error('Data handling error:', e));
+          });
+
+          peer.on('error', (err) => {
+            console.error('Peer error:', err);
+            showError('Connection failed. Please try again.');
+          });
+
+          peer.on('close', () => {
+            // Peer connection closed
+          });
+        }
+        
+        // Process SimplePeer signals (offer from sender)
         if (peer && (message.type === 'offer' || message.sdp || message.candidate)) {
           console.log('Receiver received signal:', message.type);
           peer.signal(message);
         }
       };
 
+      // Send ready signal after setting up handlers
+      currentWs.addEventListener('open', () => {
+        if (ws === currentWs && !receivedError) {
+          currentWs.send(JSON.stringify({ type: 'ready' }));
+        }
+      });
+
       currentWs.onerror = () => {
         if (ws !== currentWs) return; // Stale connection
-        showError('Could not connect. Check the code and try again.');
+        // WebSocket error - connection issue
       };
 
-      currentWs.onclose = () => {
-        console.log('WebSocket closed');
+      currentWs.onclose = (event) => {
+        console.log('WebSocket closed', event.code, event.reason);
         // Only show error if this is still the active connection and peer isn't connected
-        if (ws === currentWs && (!peer || !peer.connected)) {
-          showError('Connection lost. Please try again.');
+        // and we haven't already shown an error
+        if (ws === currentWs && (!peer || !peer.connected) && !receivedError) {
+          if (!wsOpened) {
+            // Connection failed before opening - network issue
+            showError('Could not connect. Please check your internet connection.');
+          } else {
+            // Connection was open but closed - connection lost
+            showError('Connection lost. Please try again.');
+          }
         }
       };
     }
@@ -2183,6 +2221,11 @@
         e.returnValue = '';
       }
     });
+
+    // Show iOS Safari warning on page load
+    if (isIOSSafari()) {
+      iosBrowserWarning.classList.remove('hidden');
+    }
   </script>
 </body>
 </html>
